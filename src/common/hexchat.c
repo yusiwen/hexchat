@@ -935,6 +935,7 @@ xchat_init (void)
 						defaultconf_urlhandlers);
 
 	servlist_init ();							/* load server list */
+	_SSL_certlist_init ();						/* load known certificate fingerprints */
 
 	/* if we got a URL, don't open the server list GUI */
 	if (!prefs.hex_gui_slist_skip && !arg_url && !arg_urls)
@@ -980,6 +981,7 @@ hexchat_exit (void)
 	ignore_save ();
 	free_sessions ();
 	chanopt_save_all ();
+	_SSL_certlist_exit_save ();
 	servlist_cleanup ();
 	fe_exit ();
 }

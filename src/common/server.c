@@ -621,10 +621,151 @@ ssl_cb_verify (int ok, X509_STORE_CTX * ctx)
 	return (TRUE);					  /* always ok */
 }
 
+static void
+ssl_do_connect_finish (server *serv, int success, int verify_error)
+{
+	/*
+		we land here after ssl_do_connect(). possible execution flows are:
+		ssl_do_connect -> ssl_do_connect_finish (with no user interaction)
+		ssl_do_connect -> sslalert.c -> ssl_do_connect_finish (prompt user to accept/reject certificate)
+	*/
+
+	if (success)
+	{
+		/* connection has been established */
+		server_stopconnecting (serv);
+		server_connected (serv); /* activate gtk poll */
+	}
+	else
+	{
+		/*
+			the connection failed. most likely because the certificate is invalid
+			and the user hit the cancel button to reject the connection
+		*/
+		
+		char buf[128];
+		snprintf (buf, sizeof (buf), "%s.? (%d)",
+					 X509_verify_cert_error_string (verify_error),
+					 verify_error);
+		EMIT_SIGNAL (XP_TE_CONNFAIL, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+		server_cleanup (serv);
+	}
+}
+
+typedef struct ssl_guialert_cb_context
+{
+	/* a small structure that is passed back to us from sslalert.c GUI */
+	/* it is treated as an opaque structure by sslalert.c and it does not read/write it */
+	struct server *serv;
+	struct cert_info cert;
+	int verify_error;
+} ssl_guialert_cb_context;
+
+static void
+ssl_guialert_cb (int user_action, void *callback_data)
+{
+	/* interpret the user response and possibly abandon the connection */
+	ssl_guialert_cb_context *context = callback_data;
+	switch (user_action)
+	{
+	case 0: /* user wants to abandon connection */
+		ssl_do_connect_finish (context->serv, FALSE, context->verify_error);
+		break;
+	case 1: /* user wants to accept the certificate ONLY this time */
+		ssl_do_connect_finish (context->serv, TRUE, context->verify_error);
+		break;
+	case 2: /* user wants to accept the certificate AND remember it for next time */
+		_SSL_certlist_cert_add (context->serv, &context->cert);
+		ssl_do_connect_finish (context->serv, TRUE, context->verify_error);
+		break;
+	}
+	free (context);
+}
+
+static void
+ssl_emit_connection_info (server *serv, struct cert_info *cert)
+{
+	/* TODO: add a certficiate viewer GUI and remove this mess */
+
+	char buf[128];
+	struct chiper_info *chiper_info;
+	int i;
+
+	if (cert)
+	{
+		snprintf (buf, sizeof (buf), "* Certification info:");
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+		snprintf (buf, sizeof (buf), "  Subject:");
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+		for (i = 0; cert->subject_word[i]; i++)
+		{
+			snprintf (buf, sizeof (buf), "    %s", cert->subject_word[i]);
+			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+							 NULL, 0);
+		}
+		snprintf (buf, sizeof (buf), "  Issuer:");
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+		for (i = 0; cert->issuer_word[i]; i++)
+		{
+			snprintf (buf, sizeof (buf), "    %s", cert->issuer_word[i]);
+			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+							 NULL, 0);
+		}
+		snprintf (buf, sizeof (buf), "  Public key algorithm: %s (%d bits)",
+					 cert->algorithm, cert->algorithm_bits);
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+		/*if (cert->rsa_tmp_bits)
+		{
+			snprintf (buf, sizeof (buf),
+						 "  Public key algorithm uses ephemeral key with %d bits",
+						 cert_info.rsa_tmp_bits);
+			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+							 NULL, 0);
+		}*/
+		snprintf (buf, sizeof (buf), "  Sign algorithm %s",
+					 cert->sign_algorithm/*, cert->sign_algorithm_bits*/);
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+		snprintf (buf, sizeof (buf), "  Valid since %s to %s",
+					 cert->notbefore, cert->notafter);
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+		snprintf (buf, sizeof (buf), "  SHA fingerprint: %s",
+					 cert->fingerprint);
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+
+	}
+	else
+	{
+		snprintf (buf, sizeof (buf), " * No Certificate");
+		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
+						 NULL, 0);
+	}
+
+	chiper_info = _SSL_get_cipher_info (serv->ssl);	/* static buffer */
+	snprintf (buf, sizeof (buf), "* Cipher info:");
+	EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL, NULL,
+					 0);
+	snprintf (buf, sizeof (buf), "  Version: %s, cipher %s (%u bits)",
+				 chiper_info->version, chiper_info->chiper,
+				 chiper_info->chiper_bits);
+	EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL, NULL,
+					 0);
+}
+
 static int
 ssl_do_connect (server * serv)
 {
 	char buf[128];
+	struct cert_info cert_info;
+	ssl_guialert_cb_context *cb_context;
+	int cert_error, verify_result;
 
 	g_sess = serv->server_session;
 	if (SSL_connect (serv->ssl) <= 0)
@@ -653,113 +794,7 @@ ssl_do_connect (server * serv)
 	}
 	g_sess = NULL;
 
-	if (SSL_is_init_finished (serv->ssl))
-	{
-		struct cert_info cert_info;
-		struct chiper_info *chiper_info;
-		int verify_error;
-		int i;
-
-		if (!_SSL_get_cert_info (&cert_info, serv->ssl))
-		{
-			snprintf (buf, sizeof (buf), "* Certification info:");
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-			snprintf (buf, sizeof (buf), "  Subject:");
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-			for (i = 0; cert_info.subject_word[i]; i++)
-			{
-				snprintf (buf, sizeof (buf), "    %s", cert_info.subject_word[i]);
-				EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-								 NULL, 0);
-			}
-			snprintf (buf, sizeof (buf), "  Issuer:");
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-			for (i = 0; cert_info.issuer_word[i]; i++)
-			{
-				snprintf (buf, sizeof (buf), "    %s", cert_info.issuer_word[i]);
-				EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-								 NULL, 0);
-			}
-			snprintf (buf, sizeof (buf), "  Public key algorithm: %s (%d bits)",
-						 cert_info.algorithm, cert_info.algorithm_bits);
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-			/*if (cert_info.rsa_tmp_bits)
-			{
-				snprintf (buf, sizeof (buf),
-							 "  Public key algorithm uses ephemeral key with %d bits",
-							 cert_info.rsa_tmp_bits);
-				EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-								 NULL, 0);
-			}*/
-			snprintf (buf, sizeof (buf), "  Sign algorithm %s",
-						 cert_info.sign_algorithm/*, cert_info.sign_algorithm_bits*/);
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-			snprintf (buf, sizeof (buf), "  Valid since %s to %s",
-						 cert_info.notbefore, cert_info.notafter);
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-		} else
-		{
-			snprintf (buf, sizeof (buf), " * No Certificate");
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-		}
-
-		chiper_info = _SSL_get_cipher_info (serv->ssl);	/* static buffer */
-		snprintf (buf, sizeof (buf), "* Cipher info:");
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL, NULL,
-						 0);
-		snprintf (buf, sizeof (buf), "  Version: %s, cipher %s (%u bits)",
-					 chiper_info->version, chiper_info->chiper,
-					 chiper_info->chiper_bits);
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL, NULL,
-						 0);
-
-		verify_error = SSL_get_verify_result (serv->ssl);
-		switch (verify_error)
-		{
-		case X509_V_OK:
-			/* snprintf (buf, sizeof (buf), "* Verify OK (?)"); */
-			/* EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL, NULL, 0); */
-			break;
-		case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
-		case X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE:
-		case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
-		case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
-		case X509_V_ERR_CERT_HAS_EXPIRED:
-			if (serv->accept_invalid_cert)
-			{
-				snprintf (buf, sizeof (buf), "* Verify E: %s.? (%d) -- Ignored",
-							 X509_verify_cert_error_string (verify_error),
-							 verify_error);
-				EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-								 NULL, 0);
-				break;
-			}
-		default:
-			snprintf (buf, sizeof (buf), "%s.? (%d)",
-						 X509_verify_cert_error_string (verify_error),
-						 verify_error);
-			EMIT_SIGNAL (XP_TE_CONNFAIL, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-
-			server_cleanup (serv);
-
-			return (0);
-		}
-
-		server_stopconnecting (serv);
-
-		/* activate gtk poll */
-		server_connected (serv);
-
-		return (0);					  /* remove it (0) */
-	} else
+	if (!SSL_is_init_finished (serv->ssl))
 	{
 		if (serv->ssl->session && serv->ssl->session->time + SSLTMOUT < time (NULL))
 		{
@@ -776,6 +811,51 @@ ssl_do_connect (server * serv)
 
 		return (1);					  /* call it more (1) */
 	}
+
+	cert_error = _SSL_get_cert_info (&cert_info, serv->ssl);
+	ssl_emit_connection_info (serv, (cert_error?&cert_info:0));
+
+	/* at this point we check the certificate to make sure it is valid */
+
+	verify_result = SSL_get_verify_result (serv->ssl);
+
+	switch (verify_result)
+	{
+	/* 1) certificate is valid. finish connecting */
+	case X509_V_OK:
+		ssl_do_connect_finish (serv, TRUE, verify_result);
+		return 0;
+
+	/* 2) certificate has a problem but the user might want to accept it */
+	case X509_V_ERR_UNABLE_TO_GET_ISSUER_CERT_LOCALLY:
+	case X509_V_ERR_UNABLE_TO_VERIFY_LEAF_SIGNATURE:
+	case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
+	case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
+	case X509_V_ERR_CERT_HAS_EXPIRED:
+		break;
+
+	/* 3) certificate has a problem and we should disconnect */
+	default:
+		ssl_do_connect_finish (serv, FALSE, verify_result); /* disconnect */
+		return (0);
+	}
+
+	/* check if this INVALID certificate is on the users whitelist */
+
+	if (_SSL_certlist_cert_check (serv, &cert_info))
+	{
+		ssl_do_connect_finish (serv, TRUE, verify_result);
+		return 0;
+	}
+
+	/* this INVALID certificate is not on the whitelist. ask the user what to do */
+
+	cb_context = malloc (sizeof (ssl_guialert_cb_context));
+	cb_context->serv = serv;
+	memcpy (&cb_context->cert, &cert_info, sizeof (cert_info));
+	cb_context->verify_error = verify_result;
+	fe_sslalert_open (serv, ssl_guialert_cb, cb_context); /* bring up GUI alert */
+	return (0);
 }
 #endif
 

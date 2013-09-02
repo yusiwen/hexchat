@@ -28,6 +28,8 @@
 #endif
 #include <time.h>				  /* asctime() */
 #include <string.h>				  /* strncpy() */
+#include "hexchat.h"
+#include "cfgfiles.h"
 #include "ssl.h"				  /* struct cert_info */
 
 #ifndef HAVE_SNPRINTF
@@ -148,8 +150,11 @@ _SSL_get_cert_info (struct cert_info *cert_info, SSL * ssl)
 	/* EVP_PKEY *tmp_pkey; */
 	char notBefore[64];
 	char notAfter[64];
+	char digest[EVP_MAX_MD_SIZE]; /* SHA-256 fingerprint of the certificate */
+	int digest_length;
 	int alg;
 	int sign_alg;
+	int i;
 
 
 	if (!(peer_cert = SSL_get_peer_certificate (ssl)))
@@ -185,6 +190,17 @@ _SSL_get_cert_info (struct cert_info *cert_info, SSL * ssl)
 
 	EVP_PKEY_free (peer_pkey);
 
+	/* compute the fingerprint and make it pretty */
+	X509_digest (peer_cert, EVP_sha256(), digest, &digest_length);
+	cert_info->fingerprint[0] = '\0';
+	for (i = 0; i < digest_length; ++i)
+	{
+		char digits[4];
+		sprintf (digits, (i?":%02x":"%02x"), digest[i]);
+		strcat (cert_info->fingerprint, digits);
+	}
+
+
 	/* SSL_SESSION_print_fp(stdout, SSL_get_session(ssl)); */
 /*
 	if (ssl->session->sess_cert->peer_rsa_tmp) {
@@ -219,6 +235,57 @@ _SSL_get_cipher_info (SSL * ssl)
 	return (&chiper_info);
 }
 
+int _SSL_verify_cert_hostname (struct server *serv, struct cert_info *cert)
+{
+	/*
+		returns zero on success, non-zero on failure.
+		"*.freenode.com" matches "ssl.freenode.com" and "irc.freenode.com" but not "chat.irc.freenode.com"
+	*/
+
+	int i;
+	for (i = 0; cert->subject_word[i]; i++)
+	{
+		char *cname = cert->subject_word[i];
+		if (strstr (cname, "CN=") == cname)
+		{
+			char *host = serv->hostname;
+			cname += strlen ("CN=");
+			while (*host && *cname)
+			{
+				switch (*cname)
+				{
+				case '*': /* wildcard matching */
+					switch (*host)
+					{
+					case '.':
+						cname++; /* wildcard ends */
+						break;
+					default:
+						host++; /* wildcard continues */
+						if (!*host)
+						{
+							cname++; /* wildcard ends */
+						}
+						break;
+					}
+					break;
+				default: /* regular strcmp */
+					if (*host++ != *cname++)
+					{
+						return 1; /* error: mismatch */
+					}
+					break;
+				}
+			}
+			if (*host || *cname)
+			{
+				return 1; /* error: failed to process both strings completely */
+			}
+			return 0; /* success: match */
+		}
+	}
+	return 1; /* error: no CNAME field */
+}
 
 int
 _SSL_send (SSL * ssl, char *buf, int len)
@@ -327,4 +394,170 @@ _SSL_close (SSL * ssl)
 	SSL_set_shutdown (ssl, SSL_SENT_SHUTDOWN | SSL_RECEIVED_SHUTDOWN);
 	SSL_free (ssl);
 	ERR_remove_state (0);		  /* free state buffer */
+}
+
+
+
+typedef struct ssl_certlist_item {
+	char *hostname;
+	char *fingerprint;
+	struct ssl_certlist_item *next; /* null indicates last item */
+} ssl_certlist_item;
+
+
+static ssl_certlist_item *ssl_certlist = 0; /* loaded at startup, saved on shutdown */
+
+
+static void
+_SSL_certlist_item_add (char *hn, int hn_length, char *fp, int fp_length)
+{
+	/* append a new hostname+fingerprint to the certificate list */
+
+	ssl_certlist_item *item = malloc (sizeof (ssl_certlist_item));
+	ssl_certlist_item *tmp;
+	if (item)
+	{
+		item->hostname = malloc (hn_length + 1);
+		item->fingerprint = malloc (fp_length + 1);
+		if (!item->hostname || !item->fingerprint)
+		{
+			free (item->fingerprint);
+			free (item->hostname);
+			free (item);
+			return;
+		}
+		strncpy (item->hostname, hn, hn_length);
+		item->hostname[hn_length] = '\0';
+		strncpy (item->fingerprint, fp, fp_length);
+		item->fingerprint[fp_length] = '\0';
+		item->next = 0; /* null ptr indicates list end */
+		if (!ssl_certlist)
+		{
+			ssl_certlist = item;
+			return;
+		}
+		tmp = ssl_certlist;
+		while (tmp->next) /* put new items at the end of the list */
+		{
+			tmp = tmp->next;
+		}
+		tmp->next = item;
+	}
+}
+
+
+void
+_SSL_certlist_init ()
+{
+	/*
+		parse a simple new-line/whitepsace delimited text file of hostname+fingerprint combinations.
+		it is not a problem if the file does not exist - we just end up with a empty list.
+		it should be pretty safe against corrupted input. example file contents follows:
+
+		irc.something.com 01:22:1a:c3:43:e6:35:ff:73:76:17:98:68:2f:2c:00:07:ae:1b:b8:81:a3:8d:0f:a6:a5:bd:dc:80:03:6c:33
+		ssl.someircserver.com 02:22:1a:c3:43:e6:35:ff:73:76:17:98:68:2f:2c:00:07:ae:1b:b8:81:a3:8d:0f:a6:a5:bd:dc:80:03:6c:33
+		another.com 03:22:1a:c3:43:e6:35:ff:73:76:17:98:68:2f:2c:00:07:ae:1b:b8:81:a3:8d:0f:a6:a5:bd:dc:80:03:6c:33
+	*/
+
+	int i, j;
+	int fs, ls;
+	char *fb;
+	FILE *fh;
+
+	fh = hexchat_fopen_file ("sslcerts.save", "r", 0);
+	if (!fh)
+	{
+		return;
+	}
+
+	fseek (fh, 0, SEEK_END);
+	fs = ftell (fh);
+	fseek (fh, 0, SEEK_SET);
+
+	fb = malloc (fs);
+	if (!fb)
+	{
+		fclose (fh);
+		return;
+	}
+
+	if (fread (fb, 1, fs, fh) == fs)
+	{
+		ls = 0; /* first line starts here */
+		for (i = 0; i <= fs; ++i)
+		{
+			if ((i==fs) || (fb[i]=='\n'))
+			{
+				for (j = ls; j < i; ++j)
+				{
+					if (fb[j] == ' ') /* split the line into two strings here */
+					{
+						_SSL_certlist_item_add (fb+ls, j-ls, fb+j+1, i-j-1);
+						break;
+					}
+				}
+				ls = i + 1; /* next line starts here */
+			}
+		}
+	}
+
+	free (fb);
+	fclose (fh);
+}
+
+
+void
+_SSL_certlist_exit_save ()
+{
+	/* write the list back out to disk when xchat exits. if there are no items an empty file is created. */
+
+	ssl_certlist_item *tmp;
+	FILE *fh = hexchat_fopen_file ("sslcerts.save", "w", 0);
+	if (fh)
+	{
+		while (ssl_certlist)
+		{
+			tmp = ssl_certlist; /* (hostname)(whitespace)(fingerprint)(new-line) */
+			fprintf (fh, "%s %s\n", ssl_certlist->hostname, ssl_certlist->fingerprint);
+			free (ssl_certlist->hostname);
+			free (ssl_certlist->fingerprint);
+			tmp = ssl_certlist->next;
+			free (ssl_certlist);
+			ssl_certlist = tmp;
+		}
+		fclose (fh);
+	}
+}
+
+
+int
+_SSL_certlist_cert_check (struct server *serv, struct cert_info *cert)
+{
+	/*
+		a "computer" is a hostname + certificate combination. we extract these details
+		from the input structures and make an O(n) (worst-case) pass over the list to find
+		a match. if the computer is known to us we return 1, and 0 otherwise.
+	*/
+			
+	ssl_certlist_item *item = ssl_certlist;
+	if (serv && cert)
+	{
+		while (item)
+		{
+			if (!strcmp(serv->hostname,item->hostname) && !strcmp(cert->fingerprint,item->fingerprint))
+			{
+				return 1; /* the user trusts this computer */
+			}
+			item = item->next;
+		}
+	}
+	return 0; /* the user does NOT trust this computer */
+}
+
+
+void
+_SSL_certlist_cert_add (struct server *serv, struct cert_info *cert)
+{
+	/* called from server.c when the user decides that they want to remember a computer */
+	_SSL_certlist_item_add (serv->hostname, strlen (serv->hostname), cert->fingerprint, strlen (cert->fingerprint));
 }
