@@ -50,7 +50,6 @@ AH_VERBATIM([USE_LIBCANBERRA],[#undef USE_LIBCANBERRA])
 AH_VERBATIM([USE_IPV6],[#undef USE_IPV6])
 AH_VERBATIM([USE_OPENSSL],[#undef USE_OPENSSL])
 AH_VERBATIM([USE_PLUGIN],[#undef USE_PLUGIN])
-AH_VERBATIM([USE_XLIB],[#undef USE_XLIB])
 AH_VERBATIM([USE_SIGACTION],[#undef USE_SIGACTION])
 AH_VERBATIM([USING_FREEBSD],[#undef USING_FREEBSD])
 AH_VERBATIM([USING_LINUX],[#undef USING_LINUX])
@@ -248,19 +247,6 @@ GUI_CFLAGS="$GUI_CFLAGS $GTK_CFLAGS -DG_DISABLE_SINGLE_INCLUDES -DGDK_PIXBUF_DIS
 #else
 #	GCONFTOOL=no
 #fi
-
-dnl *********************************************************************
-dnl ** XLIB *************************************************************
-dnl *********************************************************************
-
-if test "$xlib" = yes; then
-	AC_DEFINE(USE_XLIB)
-	if test "$system" = "SunOS"; then
-		LIBS="$LIBS -L/usr/openwin/lib -lX11"
-	else
-		AC_CHECK_LIB(X11, XSetWMHints)
-	fi
-fi
 
 dnl *********************************************************************
 dnl ** PERL *************************************************************
