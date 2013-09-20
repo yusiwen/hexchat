@@ -135,10 +135,6 @@ struct _GtkXText
 	int last_win_h;
 	int last_win_w;
 
-	int tint_red;
-	int tint_green;
-	int tint_blue;
-
 	GdkGC *bgc;						  /* backing pixmap */
 	GdkGC *fgc;						  /* text foreground color */
 	GdkGC *light_gc;				  /* sep bar */
@@ -241,7 +237,6 @@ struct _GtkXText
 	unsigned int auto_indent:1;
 	unsigned int thinline:1;
 	unsigned int transparent:1;
-	unsigned int shaded:1;
 	unsigned int marker:1;
 	unsigned int separator:1;
 	unsigned int wordwrap:1;
@@ -284,7 +279,6 @@ void gtk_xtext_set_show_marker (GtkXText *xtext, gboolean show_marker);
 void gtk_xtext_set_show_separator (GtkXText *xtext, gboolean show_separator);
 void gtk_xtext_set_thin_separator (GtkXText *xtext, gboolean thin_separator);
 void gtk_xtext_set_time_stamp (xtext_buffer *buf, gboolean timestamp);
-void gtk_xtext_set_tint (GtkXText *xtext, int tint_red, int tint_green, int tint_blue);
 void gtk_xtext_set_urlcheck_function (GtkXText *xtext, int (*urlcheck_function) (GtkWidget *, char *));
 void gtk_xtext_set_wordwrap (GtkXText *xtext, gboolean word_wrap);
 

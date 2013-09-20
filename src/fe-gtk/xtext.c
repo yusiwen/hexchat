@@ -21,9 +21,7 @@
  *
  */
 
-#define TINT_VALUE 195				/* 195/255 of the brightness. */
 #define GDK_MULTIHEAD_SAFE
-
 #define MARGIN 2						/* dont touch. */
 #define REFRESH_TIMEOUT 20
 #define WORDWRAP_LIMIT 24
@@ -158,50 +156,7 @@ gtk_xtext_text_width_8bit (GtkXText *xtext, unsigned char *str, int len)
 	return width;
 }
 
-#ifdef WIN32
-
-static void
-win32_draw_bg (GtkXText *xtext, int x, int y, int width, int height)
-{
-	HDC hdc;
-	HWND hwnd;
-	HRGN rgn;
-
-	if (xtext->shaded)
-	{
-		/* xtext->pixmap is really a GdkImage, created in win32_tint() */
-		gdk_draw_image (xtext->draw_buf, xtext->bgc, (GdkImage*)xtext->pixmap,
-							 x, y, x, y, width, height);
-	} else
-	{
-		hwnd = GDK_WINDOW_HWND (xtext->draw_buf);
-		hdc = GetDC (hwnd);
-
-		rgn = CreateRectRgn (x, y, x + width, y + height);
-		SelectClipRgn (hdc, rgn);
-
-		PaintDesktop (hdc);
-
-		ReleaseDC (hwnd, hdc);
-		DeleteObject (rgn);
-	}
-}
-
-static void
-xtext_draw_bg (GtkXText *xtext, int x, int y, int width, int height)
-{
-	if (xtext->transparent)
-		win32_draw_bg (xtext, x, y, width, height);
-	else
-		gdk_draw_rectangle (xtext->draw_buf, xtext->bgc, 1, x, y, width, height);
-}
-
-#else
-
-#define xtext_draw_bg(xt,x,y,w,h) gdk_draw_rectangle(xt->draw_buf, xt->bgc, \
-																	  1,x,y,w,h);
-
-#endif
+#define xtext_draw_bg(xt,x,y,w,h) gdk_draw_rectangle(xt->draw_buf, xt->bgc, 1,x,y,w,h);
 
 /* ======================================= */
 /* ============ PANGO BACKEND ============ */
@@ -359,21 +314,13 @@ backend_draw_text (GtkXText *xtext, int dofill, GdkGC *gc, int x, int y,
 
 	if (dofill)
 	{
-#ifdef WIN32
-		if (xtext->transparent && !xtext->backcolor)
-			win32_draw_bg (xtext, x, y - xtext->font->ascent, str_width,
-								xtext->fontsize);
-		else
-#endif
-		{
-			gdk_gc_get_values (gc, &val);
-			col.pixel = val.background.pixel;
-			gdk_gc_set_foreground (gc, &col);
-			gdk_draw_rectangle (xtext->draw_buf, gc, 1, x, y -
-									  xtext->font->ascent, str_width, xtext->fontsize);
-			col.pixel = val.foreground.pixel;
-			gdk_gc_set_foreground (gc, &col);
-		}
+		gdk_gc_get_values (gc, &val);
+		col.pixel = val.background.pixel;
+		gdk_gc_set_foreground (gc, &col);
+		gdk_draw_rectangle (xtext->draw_buf, gc, 1, x, y -
+									xtext->font->ascent, str_width, xtext->fontsize);
+		col.pixel = val.foreground.pixel;
+		gdk_gc_set_foreground (gc, &col);
 	}
 
 	line = pango_layout_get_lines (xtext->layout)->data;
@@ -460,7 +407,6 @@ gtk_xtext_init (GtkXText * xtext)
 	xtext->dont_render = FALSE;
 	xtext->dont_render2 = FALSE;
 	xtext->overdraw = FALSE;
-	xtext->tint_red = xtext->tint_green = xtext->tint_blue = TINT_VALUE;
 
 	xtext->adj = (GtkAdjustment *) gtk_adjustment_new (0, 0, 1, 1, 1, 1);
 	g_object_ref (G_OBJECT (xtext->adj));
@@ -3522,12 +3468,6 @@ void
 gtk_xtext_set_background (GtkXText * xtext, GdkPixmap * pixmap, gboolean trans)
 {
 	GdkGCValues val;
-	gboolean shaded = FALSE;
-
-	if (trans && (xtext->tint_red != 255 || xtext->tint_green != 255 || xtext->tint_blue != 255))
-		shaded = TRUE;
-
-	shaded = FALSE;
 	trans = FALSE;
 
 	if (xtext->pixmap)
@@ -4842,17 +4782,6 @@ void
 gtk_xtext_set_time_stamp (xtext_buffer *buf, gboolean time_stamp)
 {
 	buf->time_stamp = time_stamp;
-}
-
-void
-gtk_xtext_set_tint (GtkXText *xtext, int tint_red, int tint_green, int tint_blue)
-{
-	xtext->tint_red = tint_red;
-	xtext->tint_green = tint_green;
-	xtext->tint_blue = tint_blue;
-
-	/*if (xtext->tint_red != 255 || xtext->tint_green != 255 || xtext->tint_blue != 255)
-		shaded = TRUE;*/
 }
 
 void
