@@ -284,6 +284,7 @@ struct hexchatprefs
 	int hex_gui_tab_small;
 	int hex_gui_tab_trunc;
 	int hex_gui_throttlemeter;
+	int hex_gui_transparency;
 	int hex_gui_ulist_pos;
 	int hex_gui_ulist_sort;
 	int hex_gui_url_mod;
@@ -292,6 +293,7 @@ struct hexchatprefs
 	int hex_gui_win_left;
 	int hex_gui_win_state;
 	int hex_gui_win_top;
+	int hex_gui_win_transparent;
 	int hex_gui_win_width;
 	int hex_input_balloon_time;
 	int hex_irc_ban_type;
@@ -305,7 +307,6 @@ struct hexchatprefs
 	int hex_notify_timeout;
 	int hex_text_max_indent;
 	int hex_text_max_lines;
-	int hex_text_transparency;
 	int hex_url_grabber_limit;
 
 	/* STRINGS */

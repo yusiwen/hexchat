@@ -457,6 +457,7 @@ const struct prefs vars[] =
 	{"gui_tab_utils", P_OFFINT (hex_gui_tab_utils), TYPE_BOOL},
 	{"gui_throttlemeter", P_OFFINT (hex_gui_throttlemeter), TYPE_INT},
 	{"gui_topicbar", P_OFFINT (hex_gui_topicbar), TYPE_BOOL},
+	{"gui_transparency", P_OFFINT (hex_gui_transparency), TYPE_INT},
 	{"gui_tray", P_OFFINT (hex_gui_tray), TYPE_BOOL},
 	{"gui_tray_away", P_OFFINT (hex_gui_tray_away), TYPE_BOOL},
 	{"gui_tray_blink", P_OFFINT (hex_gui_tray_blink), TYPE_BOOL},
@@ -484,6 +485,7 @@ const struct prefs vars[] =
 	{"gui_win_state", P_OFFINT (hex_gui_win_state), TYPE_INT},
 	{"gui_win_swap", P_OFFINT (hex_gui_win_swap), TYPE_BOOL},
 	{"gui_win_top", P_OFFINT (hex_gui_win_top), TYPE_INT},
+	{"gui_win_transparent", P_OFFINT (hex_gui_win_transparent), TYPE_INT},
 	{"gui_win_ucount", P_OFFINT (hex_gui_win_ucount), TYPE_BOOL},
 	{"gui_win_width", P_OFFINT (hex_gui_win_width), TYPE_INT},
 
@@ -585,7 +587,6 @@ const struct prefs vars[] =
 	{"text_stripcolor_replay", P_OFFINT (hex_text_stripcolor_replay), TYPE_BOOL},
 	{"text_stripcolor_topic", P_OFFINT (hex_text_stripcolor_topic), TYPE_BOOL},
 	{"text_thin_sep", P_OFFINT (hex_text_thin_sep), TYPE_BOOL},
-	{"text_transparency", P_OFFINT (hex_text_transparency), TYPE_INT},
 	{"text_wordwrap", P_OFFINT (hex_text_wordwrap), TYPE_BOOL},
 
 	{"url_grabber", P_OFFINT (hex_url_grabber), TYPE_BOOL},
@@ -776,6 +777,7 @@ load_default_config(void)
 	prefs.hex_gui_tab_pos = 1;
 	prefs.hex_gui_tab_trunc = 20;
 	prefs.hex_gui_throttlemeter = 1;
+	prefs.hex_gui_transparency = 255;
 	prefs.hex_gui_ulist_pos = 3;
 	prefs.hex_gui_win_height = 400;
 	prefs.hex_gui_win_width = 640;
@@ -786,7 +788,6 @@ load_default_config(void)
 	prefs.hex_notify_timeout = 15;
 	prefs.hex_text_max_indent = 256;
 	prefs.hex_text_max_lines = 500;
-	prefs.hex_text_transparency = 255;
 	prefs.hex_url_grabber_limit = 100; 		/* 0 means unlimited */
 
 	/* STRINGS */

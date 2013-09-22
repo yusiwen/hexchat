@@ -67,12 +67,7 @@
 
 #define charlen(str) g_utf8_skip[*(guchar *)(str)]
 
-#ifdef WIN32
-#include <windows.h>
-#include <io.h>
-#include <gdk/gdk.h>
-#include <gdk/gdkwin32.h>
-#else
+#ifndef WIN32
 #include <unistd.h>
 #endif
 
@@ -4492,12 +4487,6 @@ gtk_xtext_foreach (xtext_buffer *buf, GtkXTextForeach func, void *data)
 		(*func) (buf->xtext, ent->str, data);
 		ent = ent->next;
 	}
-}
-
-void
-gtk_xtext_set_error_function (GtkXText *xtext, void (*error_function) (int))
-{
-	xtext->error_function = error_function;
 }
 
 void

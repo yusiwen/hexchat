@@ -2348,7 +2348,8 @@ mg_update_xtext (GtkWidget *wid)
 
 	gtk_xtext_set_palette (xtext, colors);
 	gtk_xtext_set_max_lines (xtext, prefs.hex_text_max_lines);
-	gtk_xtext_set_transparency (xtext, (prefs.hex_text_transparency / 255.));
+	if (!prefs.hex_gui_win_transparent)
+		gtk_xtext_set_transparency (xtext, (prefs.hex_gui_transparency / 255.));
 	gtk_xtext_set_wordwrap (xtext, prefs.hex_text_wordwrap);
 	gtk_xtext_set_show_marker (xtext, prefs.hex_text_show_marker);
 	gtk_xtext_set_show_separator (xtext, prefs.hex_text_indent ? prefs.hex_text_show_sep : 0);
@@ -2360,22 +2361,6 @@ mg_update_xtext (GtkWidget *wid)
 	}
 
 	gtk_xtext_refresh (xtext);
-}
-
-/* handle errors reported by xtext */
-
-static void
-mg_xtext_error (int type)
-{
-	switch (type)
-	{
-	case 0:
-		fe_message (_("Unable to set transparent background!\n\n"
-						"You may be using a non-compliant window\n"
-						"manager that is not currently supported.\n"), FE_MSG_WARN);
-		prefs.hex_text_transparency = 255;
-		/* no others exist yet */
-	}
 }
 
 static void
@@ -2408,7 +2393,6 @@ mg_create_textarea (session *sess, GtkWidget *box)
 	xtext = GTK_XTEXT (gui->xtext);
 	gtk_xtext_set_max_indent (xtext, prefs.hex_text_max_indent);
 	gtk_xtext_set_thin_separator (xtext, prefs.hex_text_thin_sep);
-	gtk_xtext_set_error_function (xtext, mg_xtext_error);
 	gtk_xtext_set_urlcheck_function (xtext, mg_word_check);
 	gtk_xtext_set_max_lines (xtext, prefs.hex_text_max_lines);
 	gtk_container_add (GTK_CONTAINER (frame), GTK_WIDGET (xtext));
@@ -3325,6 +3309,10 @@ mg_create_tabwindow (session *sess)
 		gtk_window_maximize (GTK_WINDOW (win));
 	if (prefs.hex_gui_win_fullscreen)
 		gtk_window_fullscreen (GTK_WINDOW (win));
+#ifndef WIN32
+	if (prefs.hex_gui_win_transparent)
+#endif
+		gtk_window_set_opacity (GTK_WINDOW (win), (prefs.hex_gui_transparency / 255.));
 	gtk_container_set_border_width (GTK_CONTAINER (win), GUI_BORDER);
 
 	g_signal_connect (G_OBJECT (win), "delete_event",

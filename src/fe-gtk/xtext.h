@@ -277,7 +277,6 @@ gboolean gtk_xtext_is_empty (xtext_buffer *buf);
 typedef void (*GtkXTextForeach) (GtkXText *xtext, unsigned char *text, void *data);
 void gtk_xtext_foreach (xtext_buffer *buf, GtkXTextForeach func, void *data);
 
-void gtk_xtext_set_error_function (GtkXText *xtext, void (*error_function) (int));
 void gtk_xtext_set_indent (GtkXText *xtext, gboolean indent);
 void gtk_xtext_set_max_indent (GtkXText *xtext, int max_auto_indent);
 void gtk_xtext_set_max_lines (GtkXText *xtext, int max_lines);

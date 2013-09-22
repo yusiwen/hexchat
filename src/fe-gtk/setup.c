@@ -161,8 +161,9 @@ static const setting appearance_settings[] =
 	{ST_TOGGLR, N_("Indent nick names"), P_OFFINTNL(hex_text_indent), N_("Make nick names right-justified"),0,0},
 	{ST_TOGGLE, N_("Show marker line"), P_OFFINTNL(hex_text_show_marker), N_("Insert a red line after the last read text."),0,0},
 #ifndef WIN32
-	{ST_HSCALE, N_("Transparency"), P_OFFINTNL(hex_text_transparency),0,0,0},
+	{ST_TOGGLR, N_("Transparent window"), P_OFFINTNL(hex_gui_win_transparent), N_("Make entire window transparent"),0,0},
 #endif
+	{ ST_HSCALE, N_ ("Transparency"), P_OFFINTNL (hex_gui_transparency), 0, 0, 0 },
 	{ST_HEADER,	N_("Time Stamps"),0,0,0},
 	{ST_TOGGLE, N_("Enable time stamps"), P_OFFINTNL(hex_stamp_text),0,0,1},
 	{ST_ENTRY,  N_("Time stamp format:"), P_OFFSETNL(hex_stamp_text_format),
@@ -829,10 +830,17 @@ setup_create_spin (GtkWidget *table, int row, const setting *set)
 }
 
 static gint
-setup_apply_tint (int *tag)
+setup_apply_trans (int *tag)
 {
-	prefs.hex_text_transparency = setup_prefs.hex_text_transparency;
-	mg_update_xtext (current_sess->gui->xtext);
+	prefs.hex_gui_transparency = setup_prefs.hex_gui_transparency;
+
+#ifndef WIN32
+	if (!prefs.hex_gui_win_transparent)
+		mg_update_xtext (current_sess->gui->xtext);
+	else
+#endif
+		gtk_window_set_opacity (GTK_WINDOW (current_sess->gui->window), (prefs.hex_gui_transparency / 255.));
+
 	*tag = 0;
 	return 0;
 }
@@ -846,7 +854,7 @@ setup_hscale_cb (GtkHScale *wid, const setting *set)
 
 	if (tag == 0)
 	{
-		tag = g_idle_add ((GSourceFunc) setup_apply_tint, &tag);
+		tag = g_idle_add ((GSourceFunc) setup_apply_trans, &tag);
 	}
 }
 
