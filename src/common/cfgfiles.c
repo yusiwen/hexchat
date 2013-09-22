@@ -786,6 +786,7 @@ load_default_config(void)
 	prefs.hex_notify_timeout = 15;
 	prefs.hex_text_max_indent = 256;
 	prefs.hex_text_max_lines = 500;
+	prefs.hex_text_transparency = 255;
 	prefs.hex_url_grabber_limit = 100; 		/* 0 means unlimited */
 
 	/* STRINGS */
