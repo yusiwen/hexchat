@@ -585,10 +585,7 @@ const struct prefs vars[] =
 	{"text_stripcolor_replay", P_OFFINT (hex_text_stripcolor_replay), TYPE_BOOL},
 	{"text_stripcolor_topic", P_OFFINT (hex_text_stripcolor_topic), TYPE_BOOL},
 	{"text_thin_sep", P_OFFINT (hex_text_thin_sep), TYPE_BOOL},
-	{"text_tint_blue", P_OFFINT (hex_text_tint_blue), TYPE_INT},
-	{"text_tint_green", P_OFFINT (hex_text_tint_green), TYPE_INT},
-	{"text_tint_red", P_OFFINT (hex_text_tint_red), TYPE_INT},
-	{"text_transparent", P_OFFINT (hex_text_transparent), TYPE_BOOL},
+	{"text_transparency", P_OFFINT (hex_text_transparency), TYPE_INT},
 	{"text_wordwrap", P_OFFINT (hex_text_wordwrap), TYPE_BOOL},
 
 	{"url_grabber", P_OFFINT (hex_url_grabber), TYPE_BOOL},
@@ -789,9 +786,6 @@ load_default_config(void)
 	prefs.hex_notify_timeout = 15;
 	prefs.hex_text_max_indent = 256;
 	prefs.hex_text_max_lines = 500;
-	prefs.hex_text_tint_blue = 195;
-	prefs.hex_text_tint_green = 195;
-	prefs.hex_text_tint_red = 195;
 	prefs.hex_url_grabber_limit = 100; 		/* 0 means unlimited */
 
 	/* STRINGS */

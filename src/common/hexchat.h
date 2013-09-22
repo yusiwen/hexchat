@@ -240,7 +240,6 @@ struct hexchatprefs
 	unsigned int hex_text_stripcolor_replay;
 	unsigned int hex_text_stripcolor_topic;
 	unsigned int hex_text_thin_sep;
-	unsigned int hex_text_transparent;
 	unsigned int hex_text_wordwrap;
 	unsigned int hex_url_grabber;
 	unsigned int hex_url_logging;
@@ -306,9 +305,7 @@ struct hexchatprefs
 	int hex_notify_timeout;
 	int hex_text_max_indent;
 	int hex_text_max_lines;
-	int hex_text_tint_blue;
-	int hex_text_tint_green;
-	int hex_text_tint_red;
+	int hex_text_transparency;
 	int hex_url_grabber_limit;
 
 	/* STRINGS */

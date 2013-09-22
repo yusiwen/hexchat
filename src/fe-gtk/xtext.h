@@ -29,6 +29,8 @@
 #define GTK_IS_XTEXT_CLASS(klass)   (G_TYPE_CHECK_CLASS_TYPE ((klass), GTK_TYPE_XTEXT))
 #define GTK_XTEXT_GET_CLASS(obj)    (G_TYPE_INSTANCE_GET_CLASS ((obj), GTK_TYPE_XTEXT, GtkXTextClass))
 
+#define NICKLEN			64
+
 #define ATTR_BOLD			'\002'
 #define ATTR_COLOR		'\003'
 #define ATTR_BLINK		'\006'
@@ -42,12 +44,14 @@
 
 /* these match palette.h */
 #define XTEXT_MIRC_COLS 32
-#define XTEXT_COLS 37		/* 32 plus 5 for extra stuff below */
+#define XTEXT_COLS 39		/* 32 plus 7 for extra stuff below */
 #define XTEXT_MARK_FG 32	/* for marking text */
 #define XTEXT_MARK_BG 33
 #define XTEXT_FG 34
 #define XTEXT_BG 35
 #define XTEXT_MARKER 36		/* for marker line */
+#define XTEXT_CUSTOM_FG 37
+#define XTEXT_CUSTOM_BG 38
 #define XTEXT_MAX_COLOR 41
 
 typedef struct _GtkXText GtkXText;
@@ -102,6 +106,8 @@ typedef struct {
 	unsigned int marker_seen:1;
 	unsigned int reset_marker_pos:1;
 
+	gchar laststamp[NICKLEN];
+
 	GList *search_found;		/* list of textentries where search found strings */
 	gchar *search_text;		/* desired text to search for */
 	gchar *search_nee;		/* prepared needle to look in haystack for */
@@ -123,7 +129,6 @@ struct _GtkXText
 	xtext_buffer *selection_buffer;
 
 	GtkAdjustment *adj;
-	GdkPixmap *pixmap;				/* 0 = use palette[19] */
 	GdkDrawable *draw_buf;			/* points to ->window */
 	GdkCursor *hand_cursor;
 	GdkCursor *resize_cursor;
@@ -135,13 +140,9 @@ struct _GtkXText
 	int last_win_h;
 	int last_win_w;
 
-	GdkGC *bgc;						  /* backing pixmap */
-	GdkGC *fgc;						  /* text foreground color */
-	GdkGC *light_gc;				  /* sep bar */
-	GdkGC *dark_gc;
-	GdkGC *thin_gc;
-	GdkGC *marker_gc;
-	gulong palette[XTEXT_COLS];
+	gint fgcol;
+	gint bgcol;
+	GdkColor palette[XTEXT_COLS];
 
 	gint io_tag;					  /* for delayed refresh events */
 	gint add_io_tag;				  /* "" when adding new text */
@@ -161,7 +162,7 @@ struct _GtkXText
 
 	int depth;						  /* gdk window depth */
 
-	char num[8];					  /* for parsing mirc color */
+	char num[20];					  /* for parsing mirc color */
 	int nc;							  /* offset into xtext->num */
 
 	textentry *hilight_ent;
@@ -201,6 +202,8 @@ struct _GtkXText
 	int clip_y;			/* clipping (y directions) */
 	int clip_y2;		/* from y to y2 */
 
+	cairo_pattern_t *bg_pattern;
+
 	/* current text states */
 	unsigned int bold:1;
 	unsigned int underline:1;
@@ -208,6 +211,7 @@ struct _GtkXText
 	unsigned int hidden:1;
 
 	/* text parsing states */
+	unsigned int parsing_htmlcolor:1;
 	unsigned int parsing_backcolor:1;
 	unsigned int parsing_color:1;
 	unsigned int backcolor:1;
@@ -229,19 +233,20 @@ struct _GtkXText
 	unsigned int in_hilight:1;
 	unsigned int un_hilight:1;
 	unsigned int recycle:1;
-	unsigned int avoid_trans:1;
-	unsigned int force_render:1;
-	unsigned int color_paste:1; /* CTRL was pressed when selection finished */
+	unsigned int indent_changed:1;
+	unsigned int supports_alpha:1;
 
 	/* settings/prefs */
 	unsigned int auto_indent:1;
+	unsigned int color_paste:1;
 	unsigned int thinline:1;
-	unsigned int transparent:1;
+	unsigned int shaded:1;
 	unsigned int marker:1;
 	unsigned int separator:1;
 	unsigned int wordwrap:1;
-	unsigned int overdraw:1;
 	unsigned int ignore_hidden:1;	/* rawlog uses this */
+
+	double transparency;
 };
 
 struct _GtkXTextClass
@@ -257,15 +262,16 @@ void gtk_xtext_append_indent (xtext_buffer *buf,
 										unsigned char *right_text, int right_len,
 										time_t stamp);
 int gtk_xtext_set_font (GtkXText *xtext, char *name);
-void gtk_xtext_set_background (GtkXText * xtext, GdkPixmap * pixmap, gboolean trans);
+void gtk_xtext_set_transparency (GtkXText *xtext, double trans);
+void gtk_xtext_set_supports_alpha (GtkXText *xtext, gboolean support);
 void gtk_xtext_set_palette (GtkXText * xtext, GdkColor palette[]);
 void gtk_xtext_clear (xtext_buffer *buf, int lines);
 void gtk_xtext_save (GtkXText * xtext, int fh);
-void gtk_xtext_refresh (GtkXText * xtext, int do_trans);
+void gtk_xtext_refresh (GtkXText * xtext);
 int gtk_xtext_lastlog (xtext_buffer *out, xtext_buffer *search_area);
 textentry *gtk_xtext_search (GtkXText * xtext, const gchar *text, gtk_xtext_search_flags flags, GError **err);
 void gtk_xtext_reset_marker_pos (GtkXText *xtext);
-void gtk_xtext_check_marker_visibility(GtkXText *xtext);
+void gtk_xtext_check_marker_visibility (GtkXText *xtext);
 
 gboolean gtk_xtext_is_empty (xtext_buffer *buf);
 typedef void (*GtkXTextForeach) (GtkXText *xtext, unsigned char *text, void *data);

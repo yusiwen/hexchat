@@ -529,12 +529,27 @@ mg_configure_cb (GtkWidget *wid, GdkEventConfigure *event, session *sess)
 			gtk_window_get_size (GTK_WINDOW (wid), &prefs.hex_gui_dialog_width,
 										&prefs.hex_gui_dialog_height);
 		}
-
-		if (((GtkXText *) sess->gui->xtext)->transparent)
-			gtk_widget_queue_draw (sess->gui->xtext);
 	}
 
 	return FALSE;
+}
+
+static void
+mg_screenchange_cb (GtkWidget *widget, GdkScreen *old_screen, gpointer data)
+{
+	GdkColormap *colormap;
+	GdkScreen *screen;
+
+ 	/* To check if the display supports alpha channels, get the colormap */
+	screen = gtk_widget_get_screen (widget);
+	colormap = gdk_screen_get_rgba_colormap (screen);
+
+	if (!colormap) /* Alpha not supported, always NULL on Windows */
+	{
+		colormap = gdk_screen_get_system_colormap (screen);
+	}
+
+	gtk_widget_set_colormap (widget, colormap);
 }
 
 /* move to a non-irc tab */
@@ -2333,7 +2348,7 @@ mg_update_xtext (GtkWidget *wid)
 
 	gtk_xtext_set_palette (xtext, colors);
 	gtk_xtext_set_max_lines (xtext, prefs.hex_text_max_lines);
-	gtk_xtext_set_background (xtext, channelwin_pix, prefs.hex_text_transparent);
+	gtk_xtext_set_transparency (xtext, (prefs.hex_text_transparency / 255.));
 	gtk_xtext_set_wordwrap (xtext, prefs.hex_text_wordwrap);
 	gtk_xtext_set_show_marker (xtext, prefs.hex_text_show_marker);
 	gtk_xtext_set_show_separator (xtext, prefs.hex_text_indent ? prefs.hex_text_show_sep : 0);
@@ -2344,7 +2359,7 @@ mg_update_xtext (GtkWidget *wid)
 		exit (1);
 	}
 
-	gtk_xtext_refresh (xtext, FALSE);
+	gtk_xtext_refresh (xtext);
 }
 
 /* handle errors reported by xtext */
@@ -2358,7 +2373,7 @@ mg_xtext_error (int type)
 		fe_message (_("Unable to set transparent background!\n\n"
 						"You may be using a non-compliant window\n"
 						"manager that is not currently supported.\n"), FE_MSG_WARN);
-		prefs.hex_text_transparent = 0;
+		prefs.hex_text_transparency = 255;
 		/* no others exist yet */
 	}
 }
@@ -3322,7 +3337,10 @@ mg_create_tabwindow (session *sess)
 							G_CALLBACK (mg_configure_cb), NULL);
 	g_signal_connect (G_OBJECT (win), "window_state_event",
 							G_CALLBACK (mg_windowstate_cb), NULL);
+	g_signal_connect(G_OBJECT (win), "screen-changed",
+							G_CALLBACK (mg_screenchange_cb), NULL);
 
+	mg_screenchange_cb (win, NULL, NULL);
 	palette_alloc (win);
 
 	sess->gui->main_table = table = gtk_table_new (4, 3, FALSE);
