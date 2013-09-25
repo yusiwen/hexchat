@@ -36,6 +36,13 @@ struct cert_info {
     int rsa_tmp_bits;
 };
 
+typedef struct ssl_alert_context
+{
+	struct server *serv;
+	struct cert_info cert;
+	int verify_error;
+} ssl_alert_context;
+
 struct chiper_info {
     char version[16];
     char chiper[24];

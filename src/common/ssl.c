@@ -158,7 +158,7 @@ _SSL_get_cert_info (struct cert_info *cert_info, SSL * ssl)
 
 
 	if (!(peer_cert = SSL_get_peer_certificate (ssl)))
-		return (1);				  /* FATAL? */
+		return 1;				  /* FATAL? */
 
 	X509_NAME_oneline (X509_get_subject_name (peer_cert), cert_info->subject,
 							 sizeof (cert_info->subject));
@@ -215,7 +215,7 @@ _SSL_get_cert_info (struct cert_info *cert_info, SSL * ssl)
 
 	X509_free (peer_cert);
 
-	return (0);
+	return 0;
 }
 
 
@@ -232,7 +232,7 @@ _SSL_get_cipher_info (SSL * ssl)
 				sizeof (chiper_info.chiper));
 	SSL_CIPHER_get_bits (c, &chiper_info.chiper_bits);
 
-	return (&chiper_info);
+	return &chiper_info;
 }
 
 int _SSL_verify_cert_hostname (struct server *serv, struct cert_info *cert)
@@ -311,7 +311,7 @@ _SSL_send (SSL * ssl, char *buf, int len)
 		break;
 	}
 
-	return (num);
+	return num;
 }
 
 
@@ -340,7 +340,7 @@ _SSL_recv (SSL * ssl, char *buf, int len)
 		break;
 	}
 
-	return (num);
+	return num;
 }
 
 
@@ -360,7 +360,7 @@ _SSL_socket (SSL_CTX *ctx, int sd)
 	else
 	        SSL_set_accept_state(ssl);
 
-	return (ssl);
+	return ssl;
 }
 
 
@@ -370,7 +370,7 @@ _SSL_set_verify (SSL_CTX *ctx, void *verify_callback, char *cacert)
 	if (!SSL_CTX_set_default_verify_paths (ctx))
 	{
 		__SSL_fill_err_buf ("SSL_CTX_set_default_verify_paths");
-		return (err_buf);
+		return err_buf;
 	}
 /*
 	if (cacert)
@@ -378,13 +378,13 @@ _SSL_set_verify (SSL_CTX *ctx, void *verify_callback, char *cacert)
 		if (!SSL_CTX_load_verify_locations (ctx, cacert, NULL))
 		{
 			__SSL_fill_err_buf ("SSL_CTX_load_verify_locations");
-			return (err_buf);
+			return err_buf;
 		}
 	}
 */
 	SSL_CTX_set_verify (ctx, SSL_VERIFY_PEER, verify_callback);
 
-	return (NULL);
+	return NULL;
 }
 
 

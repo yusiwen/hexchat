@@ -588,37 +588,13 @@ server_stopconnecting (server * serv)
 static void
 ssl_cb_info (SSL * s, int where, int ret)
 {
-/*	char buf[128];*/
-
-
-	return;							  /* FIXME: make debug level adjustable in serverlist or settings */
-
-/*	snprintf (buf, sizeof (buf), "%s (%d)", SSL_state_string_long (s), where);
-	if (g_sess)
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, g_sess, buf, NULL, NULL, NULL, 0);
-	else
-		fprintf (stderr, "%s\n", buf);*/
+	return;
 }
 
 static int
 ssl_cb_verify (int ok, X509_STORE_CTX * ctx)
 {
-	char subject[256];
-	char issuer[256];
-	char buf[512];
-
-
-	X509_NAME_oneline (X509_get_subject_name (ctx->current_cert), subject,
-							 sizeof (subject));
-	X509_NAME_oneline (X509_get_issuer_name (ctx->current_cert), issuer,
-							 sizeof (issuer));
-
-	snprintf (buf, sizeof (buf), "* Subject: %s", subject);
-	EMIT_SIGNAL (XP_TE_SSLMESSAGE, g_sess, buf, NULL, NULL, NULL, 0);
-	snprintf (buf, sizeof (buf), "* Issuer: %s", issuer);
-	EMIT_SIGNAL (XP_TE_SSLMESSAGE, g_sess, buf, NULL, NULL, NULL, 0);
-
-	return (TRUE);					  /* always ok */
+	return TRUE;	/* always ok */
 }
 
 static void
@@ -653,20 +629,11 @@ ssl_do_connect_finish (server *serv, int success, int verify_error)
 	}
 }
 
-typedef struct ssl_guialert_cb_context
-{
-	/* a small structure that is passed back to us from sslalert.c GUI */
-	/* it is treated as an opaque structure by sslalert.c and it does not read/write it */
-	struct server *serv;
-	struct cert_info cert;
-	int verify_error;
-} ssl_guialert_cb_context;
-
 static void
 ssl_guialert_cb (int user_action, void *callback_data)
 {
 	/* interpret the user response and possibly abandon the connection */
-	ssl_guialert_cb_context *context = callback_data;
+	ssl_alert_context *context = callback_data;
 	switch (user_action)
 	{
 	case 0: /* user wants to abandon connection */
@@ -683,88 +650,12 @@ ssl_guialert_cb (int user_action, void *callback_data)
 	free (context);
 }
 
-static void
-ssl_emit_connection_info (server *serv, struct cert_info *cert)
-{
-	/* TODO: add a certficiate viewer GUI and remove this mess */
-
-	char buf[128];
-	struct chiper_info *chiper_info;
-	int i;
-
-	if (cert)
-	{
-		snprintf (buf, sizeof (buf), "* Certification info:");
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-		snprintf (buf, sizeof (buf), "  Subject:");
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-		for (i = 0; cert->subject_word[i]; i++)
-		{
-			snprintf (buf, sizeof (buf), "    %s", cert->subject_word[i]);
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-		}
-		snprintf (buf, sizeof (buf), "  Issuer:");
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-		for (i = 0; cert->issuer_word[i]; i++)
-		{
-			snprintf (buf, sizeof (buf), "    %s", cert->issuer_word[i]);
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-		}
-		snprintf (buf, sizeof (buf), "  Public key algorithm: %s (%d bits)",
-					 cert->algorithm, cert->algorithm_bits);
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-		/*if (cert->rsa_tmp_bits)
-		{
-			snprintf (buf, sizeof (buf),
-						 "  Public key algorithm uses ephemeral key with %d bits",
-						 cert_info.rsa_tmp_bits);
-			EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-							 NULL, 0);
-		}*/
-		snprintf (buf, sizeof (buf), "  Sign algorithm %s",
-					 cert->sign_algorithm/*, cert->sign_algorithm_bits*/);
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-		snprintf (buf, sizeof (buf), "  Valid since %s to %s",
-					 cert->notbefore, cert->notafter);
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-		snprintf (buf, sizeof (buf), "  SHA fingerprint: %s",
-					 cert->fingerprint);
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-
-	}
-	else
-	{
-		snprintf (buf, sizeof (buf), " * No Certificate");
-		EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL,
-						 NULL, 0);
-	}
-
-	chiper_info = _SSL_get_cipher_info (serv->ssl);	/* static buffer */
-	snprintf (buf, sizeof (buf), "* Cipher info:");
-	EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL, NULL,
-					 0);
-	snprintf (buf, sizeof (buf), "  Version: %s, cipher %s (%u bits)",
-				 chiper_info->version, chiper_info->chiper,
-				 chiper_info->chiper_bits);
-	EMIT_SIGNAL (XP_TE_SSLMESSAGE, serv->server_session, buf, NULL, NULL, NULL,
-					 0);
-}
-
 static int
 ssl_do_connect (server * serv)
 {
 	char buf[128];
 	struct cert_info cert_info;
-	ssl_guialert_cb_context *cb_context;
+	ssl_alert_context *cb_context;
 	int cert_error, verify_result;
 
 	g_sess = serv->server_session;
@@ -789,7 +680,7 @@ ssl_do_connect (server * serv)
 			if (prefs.hex_net_auto_reconnectonfail)
 				auto_reconnect (serv, FALSE, -1);
 
-			return (0);				  /* remove it (0) */
+			return 0;				  /* remove it (0) */
 		}
 	}
 	g_sess = NULL;
@@ -806,14 +697,14 @@ ssl_do_connect (server * serv)
 			if (prefs.hex_net_auto_reconnectonfail)
 				auto_reconnect (serv, FALSE, -1);
 
-			return (0);				  /* remove it (0) */
+			return 0;				  /* remove it (0) */
 		}
 
-		return (1);					  /* call it more (1) */
+		return 1;					  /* call it more (1) */
 	}
 
 	cert_error = _SSL_get_cert_info (&cert_info, serv->ssl);
-	ssl_emit_connection_info (serv, (cert_error?&cert_info:0));
+	serv->cert_info = &cert_info;
 
 	/* at this point we check the certificate to make sure it is valid */
 
@@ -832,12 +723,17 @@ ssl_do_connect (server * serv)
 	case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
 	case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
 	case X509_V_ERR_CERT_HAS_EXPIRED:
+		if (serv->accept_invalid_cert)
+		{
+			ssl_do_connect_finish (serv, TRUE, verify_result);
+			return 0;
+		}
 		break;
 
 	/* 3) certificate has a problem and we should disconnect */
 	default:
 		ssl_do_connect_finish (serv, FALSE, verify_result); /* disconnect */
-		return (0);
+		return 0;
 	}
 
 	/* check if this INVALID certificate is on the users whitelist */
@@ -850,12 +746,12 @@ ssl_do_connect (server * serv)
 
 	/* this INVALID certificate is not on the whitelist. ask the user what to do */
 
-	cb_context = malloc (sizeof (ssl_guialert_cb_context));
+	cb_context = malloc (sizeof (ssl_alert_context));
 	cb_context->serv = serv;
 	memcpy (&cb_context->cert, &cert_info, sizeof (cert_info));
 	cb_context->verify_error = verify_result;
 	fe_sslalert_open (serv, ssl_guialert_cb, cb_context); /* bring up GUI alert */
-	return (0);
+	return 0;
 }
 #endif
 

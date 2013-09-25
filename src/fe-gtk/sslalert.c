@@ -64,8 +64,10 @@ fe_sslalert_open (struct server *serv, void (*callback)(int, void *), void *call
 {
 	GtkWidget *wid;
 	GtkWidget *dialog_vbox;
+	GtkWidget *expander;
 	GtkWidget *hbox1, *vbox1, *vbox2;
 	GtkWidget *img_vbox;
+	char *cert_buf;
 	char buf[256];
 	char buf2[256];
 
@@ -78,12 +80,14 @@ fe_sslalert_open (struct server *serv, void (*callback)(int, void *), void *call
 	sslalert = gtk_dialog_new ();
 	gtk_window_set_title (GTK_WINDOW (sslalert), _(DISPLAY_NAME": Security Alert"));
 	gtk_window_set_type_hint (GTK_WINDOW (sslalert), GDK_WINDOW_TYPE_HINT_DIALOG);
-	gtk_window_set_position (GTK_WINDOW (sslalert), GTK_WIN_POS_CENTER);
+	gtk_window_set_position (GTK_WINDOW (sslalert), GTK_WIN_POS_CENTER_ON_PARENT);
+	gtk_window_set_transient_for (GTK_WINDOW(sslalert), serv->front_session->gui->window);
+	gtk_window_set_modal (GTK_WINDOW (sslalert), TRUE);
 	gtk_window_set_resizable (GTK_WINDOW (sslalert), FALSE);
 
 	g_signal_connect (G_OBJECT (sslalert), "destroy", G_CALLBACK (sslalert_user_reject), 0);
 
-	dialog_vbox = GTK_DIALOG (sslalert)->vbox;
+	dialog_vbox = gtk_dialog_get_content_area (GTK_DIALOG (sslalert));
 
 	vbox1 = gtk_vbox_new (FALSE, 0);
 	gtk_box_pack_start (GTK_BOX (dialog_vbox), vbox1, TRUE, TRUE, 0);
@@ -104,7 +108,7 @@ fe_sslalert_open (struct server *serv, void (*callback)(int, void *), void *call
 	gtk_box_pack_start (GTK_BOX (hbox1), vbox2, TRUE, TRUE, 0);
 
 	snprintf (buf2, sizeof (buf2), _("Connecting to %s (+%d)"),
-	serv->hostname, serv->port);
+			serv->hostname, serv->port);
 	snprintf (buf, sizeof (buf), "\n<b>%s</b>", buf2);
 	wid = gtk_label_new (buf);
 	gtk_box_pack_start (GTK_BOX (vbox2), wid, FALSE, FALSE, 0);
@@ -113,21 +117,46 @@ fe_sslalert_open (struct server *serv, void (*callback)(int, void *), void *call
 
 	wid = gtk_label_new (_("This server has presented an invalid certificate, and is self-signed, expired, or has another problem."));
 	gtk_box_pack_start (GTK_BOX (vbox2), wid, FALSE, FALSE, 0);
-	GTK_LABEL (wid)->wrap = TRUE;
+	gtk_label_set_line_wrap (wid, TRUE);
 	gtk_misc_set_alignment (GTK_MISC (wid), 0, 0.5);
 
 	wid = gtk_label_new (_("If you are certain that your connection is not being tampered with, you can continue and your connection will be secure."));
 	gtk_box_pack_start (GTK_BOX (vbox2), wid, FALSE, FALSE, 0);
-	GTK_LABEL (wid)->wrap = TRUE;
+	gtk_label_set_line_wrap (wid, TRUE);
 	gtk_misc_set_alignment (GTK_MISC (wid), 0, 0.5);
 
 	sslalert_savecheck = gtk_check_button_new_with_label(_("Trust this connection in future"));
 	gtk_box_pack_start (GTK_BOX (vbox2), sslalert_savecheck, FALSE, FALSE, 0);
 
-	wid = gtkutil_button (GTK_DIALOG (sslalert)->action_area, GTK_STOCK_CANCEL, 0, 0, 0, _("Abort"));
+	if (serv->cert_info)
+	{
+		char *subject;
+		char *issuer;
+
+		expander = gtk_expander_new (_("More details:"));
+		gtk_container_set_border_width (GTK_CONTAINER (expander), 10);
+		gtk_box_pack_start (GTK_BOX (vbox1), expander, FALSE, FALSE, 0);
+
+		wid = gtk_label_new (NULL);
+		gtk_label_set_use_markup (wid, TRUE);
+		gtk_label_set_justify (wid, GTK_JUSTIFY_LEFT);
+		gtk_container_add (GTK_CONTAINER (expander), wid);
+
+		issuer = g_strjoinv ("\n\t", serv->cert_info->issuer_word);
+		subject = g_strjoinv ("\n\t", serv->cert_info->subject_word);
+		cert_buf = g_markup_printf_escaped ("<b>Issuer:</b> %s\n<b>Subject:</b> %s\n<b>Algorithm:</b> %s (%d bits)\n",
+											issuer, subject,
+											serv->cert_info->algorithm, serv->cert_info->algorithm_bits);
+		gtk_label_set_markup (wid, cert_buf);
+		g_free (cert_buf);
+		g_free (issuer);
+		g_free (subject);
+	}
+
+	wid = gtkutil_button (gtk_dialog_get_action_area (GTK_DIALOG (sslalert)), GTK_STOCK_CANCEL, 0, 0, 0, _("Abort"));
 	g_signal_connect (G_OBJECT (wid), "clicked", G_CALLBACK (gtkutil_destroy), sslalert);
 	gtk_widget_grab_focus (wid);
-	wid = gtkutil_button (GTK_DIALOG (sslalert)->action_area, GTK_STOCK_APPLY, 0, sslalert_user_accept, 0, _("Continue"));
+	wid = gtkutil_button (gtk_dialog_get_action_area (GTK_DIALOG (sslalert)), GTK_STOCK_APPLY, 0, sslalert_user_accept, 0, _ ("Continue"));
 
 	gtk_widget_show_all (sslalert);
 }
