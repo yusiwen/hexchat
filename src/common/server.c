@@ -630,19 +630,19 @@ ssl_do_connect_finish (server *serv, int success, int verify_error)
 }
 
 static void
-ssl_guialert_cb (int user_action, void *callback_data)
+ssl_alert_cb (int user_action, void *callback_data)
 {
 	/* interpret the user response and possibly abandon the connection */
 	ssl_alert_context *context = callback_data;
 	switch (user_action)
 	{
-	case 0: /* user wants to abandon connection */
+	case SSLALERT_RESPONSE_ABORT: /* user wants to abandon connection */
 		ssl_do_connect_finish (context->serv, FALSE, context->verify_error);
 		break;
-	case 1: /* user wants to accept the certificate ONLY this time */
+	case SSLALERT_RESPONSE_ACCEPT: /* user wants to accept the certificate ONLY this time */
 		ssl_do_connect_finish (context->serv, TRUE, context->verify_error);
 		break;
-	case 2: /* user wants to accept the certificate AND remember it for next time */
+	case SSLALERT_RESPONSE_SAVE: /* user wants to accept the certificate AND remember it for next time */
 		_SSL_certlist_cert_add (context->serv, &context->cert);
 		ssl_do_connect_finish (context->serv, TRUE, context->verify_error);
 		break;
@@ -723,11 +723,13 @@ ssl_do_connect (server * serv)
 	case X509_V_ERR_DEPTH_ZERO_SELF_SIGNED_CERT:
 	case X509_V_ERR_SELF_SIGNED_CERT_IN_CHAIN:
 	case X509_V_ERR_CERT_HAS_EXPIRED:
+#if 0
 		if (serv->accept_invalid_cert)
 		{
 			ssl_do_connect_finish (serv, TRUE, verify_result);
 			return 0;
 		}
+#endif
 		break;
 
 	/* 3) certificate has a problem and we should disconnect */
@@ -750,7 +752,7 @@ ssl_do_connect (server * serv)
 	cb_context->serv = serv;
 	memcpy (&cb_context->cert, &cert_info, sizeof (cert_info));
 	cb_context->verify_error = verify_result;
-	fe_sslalert_open (serv, ssl_guialert_cb, cb_context); /* bring up GUI alert */
+	fe_sslalert_open (serv, ssl_alert_cb, cb_context); /* bring up GUI alert */
 	return 0;
 }
 #endif

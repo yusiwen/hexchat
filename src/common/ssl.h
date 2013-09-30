@@ -36,6 +36,13 @@ struct cert_info {
     int rsa_tmp_bits;
 };
 
+enum
+{
+	SSLALERT_RESPONSE_ABORT = 0,
+	SSLALERT_RESPONSE_ACCEPT = 1,
+	SSLALERT_RESPONSE_SAVE = 2
+};
+
 typedef struct ssl_alert_context
 {
 	struct server *serv;
