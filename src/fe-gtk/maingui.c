@@ -50,14 +50,7 @@
 #include "pixmaps.h"
 #include "plugin-tray.h"
 #include "xtext.h"
-
-#ifdef USE_GTKSPELL
-#include <gtkspell/gtkspell.h>
-#endif
-
-#ifdef USE_LIBSEXY
 #include "sexy-spell-entry.h"
-#endif
 
 #define GUI_SPACING (3)
 #define GUI_BORDER (0)
@@ -86,7 +79,7 @@ static void mg_link_irctab (session *sess, int focus);
 static session_gui static_mg_gui;
 static session_gui *mg_gui = NULL;	/* the shared irc tab */
 static int ignore_chanmode = FALSE;
-static const char chan_flags[] = { 't', 'n', 's', 'i', 'p', 'm', 'l', 'k' };
+static const char chan_flags[] = { 'c', 'n', 'r', 't', 'i', 'm', 'l', 'k' };
 
 static chan *active_tab = NULL;	/* active tab */
 GtkWidget *parent_window = NULL;			/* the master window */
@@ -98,59 +91,6 @@ static PangoAttrList *newdata_list;
 static PangoAttrList *nickseen_list;
 static PangoAttrList *newmsg_list;
 static PangoAttrList *plain_list = NULL;
-
-
-#ifdef USE_GTKSPELL
-
-/* use these when it's a GtkTextView instead of GtkEntry */
-
-char *
-SPELL_ENTRY_GET_TEXT (GtkWidget *entry)
-{
-	static char *last = NULL;	/* warning: don't overlap 2 GET_TEXT calls! */
-	GtkTextBuffer *buf = gtk_text_view_get_buffer (GTK_TEXT_VIEW (entry));
-	GtkTextIter start_iter, end_iter;
-
-	gtk_text_buffer_get_iter_at_offset (buf, &start_iter, 0);
-	gtk_text_buffer_get_end_iter (buf, &end_iter);
-	g_free (last);
-	last = gtk_text_buffer_get_text (buf, &start_iter, &end_iter, FALSE);
-	return last;
-}
-
-void
-SPELL_ENTRY_SET_POS (GtkWidget *entry, int pos)
-{
-	GtkTextIter iter;
-	GtkTextBuffer *buf = gtk_text_view_get_buffer (GTK_TEXT_VIEW (entry));
-
-	gtk_text_buffer_get_iter_at_offset (buf, &iter, pos);
-	gtk_text_buffer_place_cursor (buf, &iter);
-}
-
-int
-SPELL_ENTRY_GET_POS (GtkWidget *entry)
-{
-	GtkTextIter cursor;
-	GtkTextBuffer *buf = gtk_text_view_get_buffer (GTK_TEXT_VIEW (entry));
-
-	gtk_text_buffer_get_iter_at_mark (buf, &cursor, gtk_text_buffer_get_insert (buf));
-	return gtk_text_iter_get_offset (&cursor);
-}
-
-void
-SPELL_ENTRY_INSERT (GtkWidget *entry, const char *text, int len, int *pos)
-{
-	GtkTextIter iter;
-	GtkTextBuffer *buf = gtk_text_view_get_buffer (GTK_TEXT_VIEW (entry));
-
-	/* len is bytes. pos is chars. */
-	gtk_text_buffer_get_iter_at_offset (buf, &iter, *pos);
-	gtk_text_buffer_insert (buf, &iter, text, len);
-	*pos += g_utf8_strlen (text, len);
-}
-
-#endif
 
 static PangoAttrList *
 mg_attr_list_create (GdkColor *col, int size)
@@ -399,6 +339,20 @@ mg_inputbox_cb (GtkWidget *igad, session_gui *gui)
 		handle_multiline (sess, cmd, TRUE, FALSE);
 
 	free (cmd);
+}
+
+static gboolean
+mg_spellcheck_cb (SexySpellEntry *entry, gchar *word, gpointer data)
+{
+	/* This can cause freezes on long words, nicks arn't very long anyway. */
+	if (strlen (word) > 20)
+		return TRUE;
+
+	/* Ignore anything we think is a valid url */
+	if (url_check_word (word) != 0)
+		return FALSE;
+
+	return TRUE;
 }
 
 #if 0
@@ -898,6 +852,9 @@ mg_populate (session *sess)
 		mg_decide_userlist (sess, FALSE);
 		/* shouldn't edit the topic */
 		gtk_editable_set_editable (GTK_EDITABLE (gui->topic_entry), FALSE);
+		/* might be hidden from server tab */
+		if (prefs.hex_gui_topicbar)
+			gtk_widget_show (gui->topic_bar);
 		break;
 	case SESS_SERVER:
 		if (prefs.hex_gui_mode_buttons)
@@ -906,8 +863,8 @@ mg_populate (session *sess)
 		gtk_widget_hide (gui->dialogbutton_box);
 		/* hide the userlist */
 		mg_decide_userlist (sess, FALSE);
-		/* shouldn't edit the topic */
-		gtk_editable_set_editable (GTK_EDITABLE (gui->topic_entry), FALSE);
+		/* servers don't have topics */
+		gtk_widget_hide (gui->topic_bar);
 		break;
 	default:
 		/* hide the dialog buttons */
@@ -918,6 +875,8 @@ mg_populate (session *sess)
 		mg_decide_userlist (sess, FALSE);
 		/* let the topic be editted */
 		gtk_editable_set_editable (GTK_EDITABLE (gui->topic_entry), TRUE);
+		if (prefs.hex_gui_topicbar)
+			gtk_widget_show (gui->topic_bar);
 	}
 
 	/* move to THE irc tab */
@@ -2091,15 +2050,15 @@ mg_apply_entry_style (GtkWidget *entry)
 static void
 mg_create_chanmodebuttons (session_gui *gui, GtkWidget *box)
 {
-	gui->flag_t = mg_create_flagbutton (_("Topic Protection"), box, "T");
-	gui->flag_n = mg_create_flagbutton (_("No outside messages"), box, "N");
-	gui->flag_s = mg_create_flagbutton (_("Secret"), box, "S");
-	gui->flag_i = mg_create_flagbutton (_("Invite Only"), box, "I");
-	gui->flag_p = mg_create_flagbutton (_("Private"), box, "P");
-	gui->flag_m = mg_create_flagbutton (_("Moderated"), box, "M");
-	gui->flag_b = mg_create_flagbutton (_("Ban List"), box, "B");
+	gui->flag_c = mg_create_flagbutton (_("Filter Colors"), box, "c");
+	gui->flag_n = mg_create_flagbutton (_("No outside messages"), box, "n");
+	gui->flag_r = mg_create_flagbutton (_("Registered Only"), box, "r");
+	gui->flag_t = mg_create_flagbutton (_("Topic Protection"), box, "t");
+	gui->flag_i = mg_create_flagbutton (_("Invite Only"), box, "i");
+	gui->flag_m = mg_create_flagbutton (_("Moderated"), box, "m");
+	gui->flag_b = mg_create_flagbutton (_("Ban List"), box, "b");
 
-	gui->flag_k = mg_create_flagbutton (_("Keyword"), box, "K");
+	gui->flag_k = mg_create_flagbutton (_("Keyword"), box, "k");
 	gui->key_entry = gtk_entry_new ();
 	gtk_widget_set_name (gui->key_entry, "hexchat-inputbox");
 	gtk_entry_set_max_length (GTK_ENTRY (gui->key_entry), 23);
@@ -2111,7 +2070,7 @@ mg_create_chanmodebuttons (session_gui *gui, GtkWidget *box)
 	if (prefs.hex_gui_input_style)
 		mg_apply_entry_style (gui->key_entry);
 
-	gui->flag_l = mg_create_flagbutton (_("User Limit"), box, "L");
+	gui->flag_l = mg_create_flagbutton (_("User Limit"), box, "l");
 	gui->limit_entry = gtk_entry_new ();
 	gtk_widget_set_name (gui->limit_entry, "hexchat-inputbox");
 	gtk_entry_set_max_length (GTK_ENTRY (gui->limit_entry), 10);
@@ -2202,8 +2161,9 @@ mg_create_topicbar (session *sess, GtkWidget *box)
 	if (!gui->is_tab)
 		sess->res->tab = NULL;
 
-	gui->topic_entry = topic = gtk_entry_new ();
+	gui->topic_entry = topic = sexy_spell_entry_new ();
 	gtk_widget_set_name (topic, "hexchat-inputbox");
+	sexy_spell_entry_set_checked (SEXY_SPELL_ENTRY (topic), FALSE);
 	gtk_container_add (GTK_CONTAINER (hbox), topic);
 	g_signal_connect (G_OBJECT (topic), "activate",
 							G_CALLBACK (mg_topic_cb), 0);
@@ -2994,9 +2954,6 @@ static void
 mg_create_entry (session *sess, GtkWidget *box)
 {
 	GtkWidget *hbox, *but, *entry;
-#ifdef USE_GTKSPELL
-	GtkWidget *sw;
-#endif
 	session_gui *gui = sess->gui;
 
 	hbox = gtk_hbox_new (FALSE, 0);
@@ -3012,34 +2969,14 @@ mg_create_entry (session *sess, GtkWidget *box)
 	g_signal_connect (G_OBJECT (but), "clicked",
 							G_CALLBACK (mg_nickclick_cb), NULL);
 
-#ifdef USE_GTKSPELL
-	gui->input_box = entry = gtk_text_view_new ();
-	gtk_widget_set_size_request (entry, 0, 1);
-	gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (entry), GTK_WRAP_NONE);
-	gtk_text_view_set_accepts_tab (GTK_TEXT_VIEW (entry), FALSE);
-	if (prefs.hex_gui_input_spell)
-		gtkspell_new_attach (GTK_TEXT_VIEW (entry), NULL, NULL);
-
-	sw = gtk_scrolled_window_new (NULL, NULL);
-	gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (sw),
-													 GTK_SHADOW_IN);
-	gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (sw),
-												GTK_POLICY_NEVER,
-												GTK_POLICY_AUTOMATIC);
-	gtk_container_add (GTK_CONTAINER (sw), entry);
-	gtk_container_add (GTK_CONTAINER (hbox), sw);
-#else
-#ifdef USE_LIBSEXY
 	gui->input_box = entry = sexy_spell_entry_new ();
 	sexy_spell_entry_set_checked ((SexySpellEntry *)entry, prefs.hex_gui_input_spell);
-#else
-	gui->input_box = entry = gtk_entry_new ();
-#endif
+	sexy_spell_entry_set_parse_attributes ((SexySpellEntry *)entry, prefs.hex_gui_input_attr);
+
 	gtk_entry_set_max_length (GTK_ENTRY (gui->input_box), 0);
 	g_signal_connect (G_OBJECT (entry), "activate",
 							G_CALLBACK (mg_inputbox_cb), gui);
 	gtk_container_add (GTK_CONTAINER (hbox), entry);
-#endif
 
 	gtk_widget_set_name (entry, "hexchat-inputbox");
 	g_signal_connect (G_OBJECT (entry), "key_press_event",
@@ -3048,6 +2985,8 @@ mg_create_entry (session *sess, GtkWidget *box)
 							G_CALLBACK (mg_inputbox_focus), gui);
 	g_signal_connect (G_OBJECT (entry), "populate_popup",
 							G_CALLBACK (mg_inputbox_rightclick), NULL);
+	g_signal_connect (G_OBJECT (entry), "word-check",
+							G_CALLBACK (mg_spellcheck_cb), NULL);
 	gtk_widget_grab_focus (entry);
 
 	if (prefs.hex_gui_input_style)
@@ -3223,8 +3162,8 @@ mg_create_topwindow (session *sess)
 	if (prefs.hex_gui_hide_menu)
 		gtk_widget_hide (sess->gui->menu);
 
-	if (!prefs.hex_gui_topicbar)
-		gtk_widget_hide (sess->gui->topic_bar);
+	/* Will be shown when needed */
+	gtk_widget_hide (sess->gui->topic_bar);
 
 	if (!prefs.hex_gui_ulist_buttons)
 		gtk_widget_hide (sess->gui->button_box);
@@ -3328,8 +3267,8 @@ mg_create_tabwindow (session *sess)
 
 	mg_decide_userlist (sess, FALSE);
 
-	if (!prefs.hex_gui_topicbar)
-		gtk_widget_hide (sess->gui->topic_bar);
+	/* Will be shown when needed */
+	gtk_widget_hide (sess->gui->topic_bar);
 
 	if (!prefs.hex_gui_mode_buttons)
 		gtk_widget_hide (sess->gui->topicbutton_box);
@@ -3489,11 +3428,20 @@ fe_update_mode_buttons (session *sess, char mode, char sign)
 		{
 			if (!sess->gui->is_tab || sess == current_tab)
 			{
-				ignore_chanmode = TRUE;
-				if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (sess->gui->flag_wid[i])) != state)
-					gtk_toggle_button_set_active (
-							GTK_TOGGLE_BUTTON (sess->gui->flag_wid[i]), state);
-				ignore_chanmode = FALSE;
+				/* Mode not supported */
+				if (sess->server && strchr (sess->server->chanmodes, mode) == NULL)
+				{
+					gtk_widget_hide (sess->gui->flag_wid[i]);
+				}
+				else
+				{
+					gtk_widget_show (sess->gui->flag_wid[i]);
+					ignore_chanmode = TRUE;
+					if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (sess->gui->flag_wid[i])) != state)
+						gtk_toggle_button_set_active (
+						GTK_TOGGLE_BUTTON (sess->gui->flag_wid[i]), state);
+					ignore_chanmode = FALSE;
+				}
 			} else
 			{
 				sess->res->flag_wid_state[i] = state;
