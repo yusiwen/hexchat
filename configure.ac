@@ -41,8 +41,6 @@ AH_VERBATIM([HEXCHATSHAREDIR],[#undef HEXCHATSHAREDIR])
 AH_VERBATIM([SOCKS],[#undef SOCKS])
 AH_VERBATIM([USE_MSPROXY],[#undef USE_MSPROXY])
 AH_VERBATIM([USE_LIBPROXY],[#undef USE_LIBPROXY])
-AH_VERBATIM([USE_GTKSPELL],[#undef USE_GTKSPELL])
-AH_VERBATIM([USE_LIBSEXY],[#undef USE_LIBSEXY])
 AH_VERBATIM([HAVE_ISO_CODES],[#undef HAVE_ISO_CODES])
 AH_VERBATIM([USE_LIBNOTIFY],[#undef USE_LIBNOTIFY])
 AH_VERBATIM([USE_LIBCANBERRA],[#undef USE_LIBCANBERRA])
@@ -144,10 +142,6 @@ AC_ARG_ENABLE(libcanberra,
 	[AS_HELP_STRING([--disable-libcanberra],[disable libcanberra support])],
 		libcanberra=$enableval, libcanberra=yes)
 
-AC_ARG_ENABLE(spell,
-	[AS_HELP_STRING([--enable-spell=type],[enable spelling type: none static libsexy gtkspell])],
-		  spell=$enableval, spell=libsexy)
-
 AC_ARG_ENABLE(ntlm,
 	[AS_HELP_STRING([--enable-ntlm],[enable Microsoft\'s NTLM auth (libntlm) library support (default: no)])],
 	ntlm=$enableval, ntlm=no)
@@ -155,6 +149,10 @@ AC_ARG_ENABLE(ntlm,
 AC_ARG_ENABLE(libproxy,
 	[AS_HELP_STRING([--disable-libproxy],[disable libproxy support (default: auto)])],
         libproxy=$enableval, libproxy=auto)
+
+AC_ARG_ENABLE(isocodes,
+	[AS_HELP_STRING([--disable-isocodes],[disable iso-codes with spell-check])],
+        isocodes=$enableval, isocodes=yes)
 
 AC_ARG_ENABLE(minimal-flags,
 	[AS_HELP_STRING([--enable-minimal-flags],[only add those CFLAGS that are really needed or not intrusive (default: no)])],
@@ -540,38 +538,17 @@ dnl *********************************************************************
 dnl ** SPELL ************************************************************
 dnl *********************************************************************
 
-if test "$spell" = "gtkspell" ; then
-	PKG_CHECK_MODULES(GTKSPELL, gtkspell-2.0 >= 2.0.2, [], [
-		spell=no
-	])
-	if test "$spell" != "no" ; then
-		GUI_LIBS="$GUI_LIBS $GTKSPELL_LIBS"
-		GUI_CFLAGS="$GUI_CFLAGS $GTKSPELL_CFLAGS"
-		AC_DEFINE(USE_GTKSPELL)
-	fi
-fi
-
-if test "$spell" = "libsexy" ; then
-	PKG_CHECK_MODULES([LIBSEXY], [libsexy >= 0.1.8], [
-		libsexy=yes
-		GUI_LIBS="$GUI_LIBS $LIBSEXY_LIBS"
-		GUI_CFLAGS="$GUI_CFLAGS $LIBSEXY_CFLAGS"
-		AC_DEFINE(USE_LIBSEXY)
-	], [
-		dnl use builtin static one
-		spell="static"
-	])
-fi
-
-if test "$spell" = "static" ; then
-	PKG_CHECK_MODULES(LIBXML2, libxml-2.0 >= 2.0.0, [
-	AC_DEFINE(HAVE_ISO_CODES)
-	AC_DEFINE(USE_LIBSEXY)
-	GUI_CFLAGS="$GUI_CFLAGS $LIBXML2_CFLAGS"
-	LIBS="$LIBS -lxml2"
-	], [
-	AC_MSG_ERROR(Cannot find libxml2!)
-	])
+if test "x$isocodes" = "xyes" ; then
+	PKG_CHECK_MODULES(ISOCODES, "iso-codes", [
+		iso_codes_prefix=`$PKG_CONFIG --variable=prefix iso-codes 2>/dev/null || echo /usr`
+    	AC_MSG_NOTICE([iso-codes prefix: $iso_codes_prefix])
+    	AC_DEFINE_UNQUOTED([ISO_CODES_PREFIX], ["$iso_codes_prefix"], [ISO codes prefix])
+    	AC_DEFINE_UNQUOTED([ISO_CODES_LOCALEDIR], ["$iso_codes_prefix/share/locale"], [ISO codes locale dir])
+    	AC_DEFINE([HAVE_ISO_CODES], [1], [iso-codes available])
+    	], [
+    	isocodes=no
+    	AC_MSG_WARN(iso-codes not found!)
+    ])
 fi
 
 dnl *********************************************************************
@@ -579,7 +556,6 @@ dnl ** CONDITIONALS *****************************************************
 dnl *********************************************************************
 
 AM_CONDITIONAL(USE_OPENSSL, test "x$openssl" = "xyes")
-AM_CONDITIONAL(USE_LIBSEXY, test "x$spell" = "xstatic")
 AM_CONDITIONAL(USE_LIBNOTIFY, test "x$libnotify" = "xyes")
 AM_CONDITIONAL(USE_LIBCANBERRA, test "x$libcanberra" = "xyes")
 AM_CONDITIONAL(DO_TEXT, test "x$textfe" = "xyes")
@@ -592,6 +568,7 @@ AM_CONDITIONAL(DO_DOAT, test "x$doat" = "xyes")
 AM_CONDITIONAL(DO_FISHLIM, test "x$fishlim" = "xyes")
 AM_CONDITIONAL(DO_SYSINFO, test "x$sysinfo" = "xyes")
 AM_CONDITIONAL(USE_DBUS, test "x$dbus" = "xyes")
+AM_CONDITIONAL(HAVE_ISO_CODES, test "x$isocodes" = "xyes")
 AM_CONDITIONAL(WITH_TM, test "x$theme_manager" != "xno")
 
 dnl *********************************************************************
@@ -842,7 +819,6 @@ echo OpenSSL support ....... : $openssl
 echo D-Bus support ......... : $dbus
 echo libnotify support ..... : $libnotify
 echo libcanberra support ... : $libcanberra
-echo Spelling .............. : $spell
 echo Plugin interface ...... : $plugin
 echo NLS/gettext ........... : $USE_NLS
 echo IPv6 support .......... : $ipv6
@@ -862,11 +838,6 @@ echo
 
 if test "$gtkfe" = no; then
 	echo Warning: The GTK \(GUI\) frontend will not be built.
-	echo
-fi
-
-if test "$spell" = "gtkspell"; then
-	echo Warning: GTK SPELL is not the recommended spelling library.
 	echo
 fi
 
