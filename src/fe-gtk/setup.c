@@ -187,7 +187,7 @@ static const setting inputbox_settings[] =
 {
 	{ST_HEADER, N_("Input Box"),0,0,0},
 	{ST_TOGGLE, N_("Use the Text box font and colors"), P_OFFINTNL(hex_gui_input_style),0,0,0},
-	{ST_TOGGLE, N_("Show attributes"), P_OFFINTNL (hex_gui_input_attr),0,0,0},
+	{ST_TOGGLE, N_("Render colors and attributes"), P_OFFINTNL (hex_gui_input_attr),0,0,0},
 	{ST_TOGGLE, N_("Show nick box"), P_OFFINTNL(hex_gui_input_nick),0,0,1},
 	{ST_TOGGLE, N_("Show user mode icon in nick box"), P_OFFINTNL(hex_gui_input_icon),0,0,0},
 	{ST_TOGGLE, N_("Spell checking"), P_OFFINTNL(hex_gui_input_spell),0,0,1},
@@ -318,6 +318,7 @@ static const setting tabs_settings[] =
 	{ST_TOGGLE, N_("Sort tabs in alphabetical order"), P_OFFINTNL(hex_gui_tab_sort), 0, 0, 0},
 	{ST_TOGGLE, N_("Show icons in the channel tree"), P_OFFINTNL(hex_gui_tab_icons), 0, 0, 0},
 	{ST_TOGGLE, N_("Show dotted lines in the channel tree"), P_OFFINTNL(hex_gui_tab_dots), 0, 0, 0},
+	{ST_TOGGLE, N_("Scroll mouse-wheel to change tabs"), P_OFFINTNL (hex_gui_tab_scrollchans), 0, 0, 0},
 	{ST_TOGGLE, N_("Smaller text"), P_OFFINTNL(hex_gui_tab_small), 0, 0, 0},
 	{ST_MENU,	N_("Focus new tabs:"), P_OFFINTNL(hex_gui_tab_newtofront), 0, focusnewtabsmenu, 0},
 	{ST_MENU,	N_("Placement of notices:"), P_OFFINTNL(hex_irc_notice_pos), 0, noticeposmenu, 0},
@@ -1523,9 +1524,7 @@ setup_create_color_page (void)
 	setup_create_other_color (_("New message:"), COL_NEW_MSG, 10, tab);
 	setup_create_other_colorR (_("Away user:"), COL_AWAY, 10, tab);
 	setup_create_other_color (_("Highlight:"), COL_HILIGHT, 11, tab);
-#ifdef HAVE_ISO_CODES /* Defined with static spelling */
 	setup_create_other_colorR (_("Spell checker:"), COL_SPELL, 11, tab);
-#endif
 
 	setup_create_header (tab, 15, N_("Color Stripping"));
 

@@ -2278,7 +2278,7 @@ cmd_ignore (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 				snprintf (tbuf, TBUFSIZE, "%s!*@*", word[2]);
 			}
 
-			i = ignore_add (mask, type);
+			i = ignore_add (mask, type, TRUE);
 			if (quiet)
 				return TRUE;
 			switch (i)
@@ -2842,7 +2842,7 @@ cmd_newserver (struct session *sess, char *tbuf, char *word[],
 		return TRUE;
 	}
 	
-	sess = new_ircwindow (NULL, NULL, SESS_SERVER, 0);
+	sess = new_ircwindow (NULL, NULL, SESS_SERVER, 1);
 	cmd_server (sess, tbuf, word, word_eol);
 	return TRUE;
 }
@@ -2986,16 +2986,18 @@ cmd_ping (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 	return TRUE;
 }
 
-void
+session *
 open_query (server *serv, char *nick, gboolean focus_existing)
 {
 	session *sess;
 
 	sess = find_dialog (serv, nick);
 	if (!sess)
-		new_ircwindow (serv, nick, SESS_DIALOG, focus_existing);
+		sess = new_ircwindow (serv, nick, SESS_DIALOG, focus_existing);
 	else if (focus_existing)
 		fe_ctrl_gui (sess, 2, 0);	/* bring-to-front */
+
+	return sess;
 }
 
 static int
@@ -3017,10 +3019,14 @@ cmd_query (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 
 	if (*nick && !is_channel (sess->server, nick))
 	{
-		open_query (sess->server, nick, focus);
+		struct session *nick_sess;
+
+		nick_sess = open_query (sess->server, nick, focus);
 
 		if (*msg)
 		{
+			message_tags_data no_tags = MESSAGE_TAGS_DATA_INIT;
+
 			if (!sess->server->connected)
 			{
 				notc_msg (sess);
@@ -3030,6 +3036,9 @@ cmd_query (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 			while ((split_text = split_up_text (sess, msg + offset, cmd_length, split_text)))
 			{
 				sess->server->p_message (sess->server, nick, split_text);
+				inbound_chanmsg (nick_sess->server, nick_sess, nick_sess->channel,
+								 nick_sess->server->nick, split_text, TRUE, FALSE,
+								 &no_tags);
 
 				if (*split_text)
 					offset += strlen(split_text);
@@ -3037,6 +3046,9 @@ cmd_query (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 				g_free(split_text);
 			}
 			sess->server->p_message (sess->server, nick, msg + offset);
+			inbound_chanmsg (nick_sess->server, nick_sess, nick_sess->channel,
+							 nick_sess->server->nick, msg + offset, TRUE, FALSE,
+							 &no_tags);
 		}
 
 		return TRUE;
