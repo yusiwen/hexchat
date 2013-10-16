@@ -25,11 +25,6 @@ typedef struct
 	GtkWidget *scrollw;	/* scrolledWindow */
 } treeview;
 
-#include "../common/hexchat.h"
-#include "../common/hexchatc.h"
-#include "fe-gtk.h"
-#include "maingui.h"
-
 #include <gdk/gdk.h>
 
 static void 	/* row-activated, when a row is double clicked */
@@ -86,6 +81,18 @@ cv_tree_click_cb (GtkTreeView *tree, GdkEventButton *event, chanview *cv)
 		gtk_tree_path_free (path);
 	}
 	return ret;
+}
+
+static void
+cv_tree_scroll_event_cb (GtkWidget *widget, GdkEventScroll *event)
+{
+	if (prefs.hex_gui_tab_scrollchans)
+	{
+		if (event->direction == GDK_SCROLL_DOWN)
+			mg_switch_page (1, 1);
+		else if (event->direction == GDK_SCROLL_UP)
+			mg_switch_page (1, -1);
+	}
 }
 
 static void
@@ -163,6 +170,8 @@ cv_tree_init (chanview *cv)
 							G_CALLBACK (cv_tree_click_cb), cv);
 	g_signal_connect (G_OBJECT (view), "row-activated",
 							G_CALLBACK (cv_tree_activated_cb), NULL);
+	g_signal_connect (G_OBJECT (view), "scroll_event",
+							G_CALLBACK (cv_tree_scroll_event_cb), NULL);
 
 	gtk_drag_dest_set (view, GTK_DEST_DEFAULT_ALL, dnd_dest_target, 1,
 							 GDK_ACTION_MOVE | GDK_ACTION_COPY | GDK_ACTION_LINK);
@@ -254,7 +263,7 @@ cv_tree_focus (chan *ch)
 		gtk_tree_view_get_visible_rect (tree, &vis_rect);
 
 		/* The cordinates aren't offset correctly */
-		gtk_tree_view_widget_to_tree_coords( tree, cell_rect.x, cell_rect.y, NULL, &cell_rect.y );
+		gtk_tree_view_convert_widget_to_bin_window_coords ( tree, cell_rect.x, cell_rect.y, NULL, &cell_rect.y );
 
 		/* only need to scroll if out of bounds */
 		if (cell_rect.y < vis_rect.y ||

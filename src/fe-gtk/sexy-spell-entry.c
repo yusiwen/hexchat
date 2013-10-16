@@ -930,6 +930,11 @@ check_attributes (SexySpellEntry *entry, const char *text, int len)
 			insert_color (entry, i, COL_BG, COL_FG);
 			goto check_color;
 
+		case '\n':
+			insert_reset (entry, i);
+			parsing_color = 0;
+			break;
+
 		case ATTR_COLOR:
 			parsing_color = 1;
 			break;
@@ -950,6 +955,10 @@ check_color:
 					parsing_color = 5;
 			}
 
+			/* don't parse background color without a comma */
+			else if (parsing_color == 3 && text[i - 1] != ',')
+				parsing_color = 5;
+
 			switch (parsing_color)
 			{
 			case 1:
@@ -965,7 +974,7 @@ check_color:
 			case 3:
 				bg_color[0] = text[i];
 				parsing_color++;
-				bg_offset = 3 + fg_offset; /* 1 extra for , */
+				bg_offset = 2 + fg_offset; /* 1 extra for , */
 				continue;
 			case 4:
 				bg_color[1] = text[i];
@@ -1117,7 +1126,8 @@ entry_strsplit_utf8(GtkEntry *entry, gchar ***set, gint **starts, gint **ends)
 
 			/* Find the end of this string */
 			cend = i;
-			while ((!log_attrs[cend].is_word_end || !log_attrs[cend].is_word_boundary))
+			while ((!log_attrs[cend].is_word_end || !log_attrs[cend].is_word_boundary)
+					&& !log_attrs[cend].is_white)
 				cend++;
 
 			/* Copy sub-string */
@@ -1251,6 +1261,7 @@ sexy_spell_entry_activate_language_internal(SexySpellEntry *entry, const gchar *
 		return FALSE;
 	}
 
+	enchant_dict_add_to_session (dict, "HexChat", strlen("HexChat"));
 	entry->priv->dict_list = g_slist_append(entry->priv->dict_list, (gpointer) dict);
 	g_hash_table_insert(entry->priv->dict_hash, get_lang_from_dict(dict), (gpointer) dict);
 
