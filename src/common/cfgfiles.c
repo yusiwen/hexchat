@@ -332,7 +332,19 @@ get_xdir (void)
 
 		if (portable_mode () || !get_reg_str ("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Shell Folders", "AppData", out, sizeof (out)))
 		{
-			xdir = g_strdup (".\\config");
+			char *path;
+			char file[MAX_PATH];
+			HMODULE hModule;
+			
+			hModule = GetModuleHandle (NULL);
+			if (GetModuleFileName (hModule, file, sizeof(file)))
+			{
+				path = g_path_get_dirname (file);
+				xdir = g_build_filename (path, "config", NULL);
+				g_free (path);
+			}
+			else
+				xdir = g_strdup (".\\config");
 		}
 		else
 		{
@@ -516,6 +528,7 @@ const struct prefs vars[] =
 	{"irc_conf_mode", P_OFFINT (hex_irc_conf_mode), TYPE_BOOL},
 	{"irc_extra_hilight", P_OFFSET (hex_irc_extra_hilight), TYPE_STR},
 	{"irc_hide_version", P_OFFINT (hex_irc_hide_version), TYPE_BOOL},
+	{"irc_hidehost", P_OFFINT (hex_irc_hidehost), TYPE_BOOL},
 	{"irc_id_ntext", P_OFFSET (hex_irc_id_ntext), TYPE_STR},
 	{"irc_id_ytext", P_OFFSET (hex_irc_id_ytext), TYPE_STR},
 	{"irc_invisible", P_OFFINT (hex_irc_invisible), TYPE_BOOL},

@@ -667,8 +667,10 @@ inbound_nameslist (server *serv, char *chan, char *names,
 						 const message_tags_data *tags_data)
 {
 	session *sess;
+	char **name_list;
+	char *host, *nopre_name;
 	char name[NICKLEN];
-	int pos = 0;
+	int i, offset;
 
 	sess = find_channel (serv, chan);
 	if (!sess)
@@ -687,27 +689,37 @@ inbound_nameslist (server *serv, char *chan, char *names,
 		userlist_clear (sess);
 	}
 
-	while (1)
+	name_list = g_strsplit (names, " ", -1);
+	for (i = 0; name_list[i]; i++)
 	{
-		switch (*names)
+		host = NULL;
+		offset = sizeof(name);
+
+		if (name_list[i][0] == 0)
+			continue;
+
+		if (serv->have_uhnames)
 		{
-		case 0:
-			name[pos] = 0;
-			if (pos != 0)
-				userlist_add (sess, name, 0, NULL, NULL, tags_data);
-			return;
-		case ' ':
-			name[pos] = 0;
-			pos = 0;
-			userlist_add (sess, name, 0, NULL, NULL, tags_data);
-			break;
-		default:
-			name[pos] = *names;
-			if (pos < (NICKLEN-1))
-				pos++;
+			offset = 0;
+			nopre_name = name_list[i];
+
+			/* Ignore prefixes so '!' won't cause issues */
+			while (strchr (serv->nick_prefixes, *nopre_name) != NULL)
+			{
+				nopre_name++;
+				offset++;
+			}
+
+			offset += strcspn (nopre_name, "!");
+			if (offset++ < strlen (name_list[i]))
+				host = name_list[i] + offset;
 		}
-		names++;
+
+		g_strlcpy (name, name_list[i], MIN(offset, sizeof(name)));
+
+		userlist_add (sess, name, host, NULL, NULL, tags_data);
 	}
+	g_strfreev (name_list);
 }
 
 void
@@ -1288,6 +1300,8 @@ set_default_modes (server *serv)
 		strcat (modes, "s");
 	if (prefs.hex_irc_invisible)
 		strcat (modes, "i");
+	if (prefs.hex_irc_hidehost)
+		strcat (modes, "x");
 
 	if (modes[1] != '\0')
 	{
@@ -1594,6 +1608,11 @@ inbound_cap_ack (server *serv, char *nick, char *extensions,
 		serv->have_extjoin = TRUE;
 	}
 
+	if (strstr (extensions, "userhost-in-names") != NULL)
+	{
+		serv->have_uhnames = TRUE;
+	}
+
 	if (strstr (extensions, "server-time") != NULL)
 	{
 		serv->have_server_time = TRUE;
@@ -1671,6 +1690,11 @@ inbound_cap_ls (server *serv, char *nick, char *extensions_str,
 			strcat (buffer, "extended-join ");
 			want_cap = 1;
 		}
+		if (!strcmp (extension, "userhost-in-names"))
+		{
+			strcat (buffer, "userhost-in-names ");
+			want_cap = 1;
+		}
 
 		/* bouncers can prefix a name space to the extension so we should use.
 		 * znc <= 1.0 uses "znc.in/server-time" and newer use "znc.in/server-time-iso".
@@ -1744,11 +1768,37 @@ static const char *sasl_mechanisms[] =
 void
 inbound_sasl_authenticate (server *serv, char *data)
 {
+		ircnet *net = (ircnet*)serv->network;
 		char *user, *pass = NULL;
 		const char *mech = sasl_mechanisms[serv->sasl_mech];
+		int i;
 
-		user = (((ircnet*)serv->network)->user)
-				? (((ircnet*)serv->network)->user) : prefs.hex_irc_user_name;
+		/* Got a list of supported mechanisms */
+		if (strchr (data, ',') != NULL)
+		{
+			if (serv->sasl_mech == MECH_EXTERNAL)
+				goto sasl_abort;
+
+			/* Use most secure one supported */
+			for (i = MECH_AES; i >= MECH_PLAIN; i--)
+			{
+				if (strstr (data, sasl_mechanisms[i]) != NULL)
+				{
+					serv->sasl_mech = i;
+					serv->retry_sasl = TRUE;
+					tcp_sendf (serv, "AUTHENTICATE %s\r\n", sasl_mechanisms[i]);
+					return;
+				}
+			}
+
+			/* Nothing we support */
+			goto sasl_abort;
+		}
+
+		if (net->user && !(net->flags & FLAG_USE_GLOBAL))
+			user = net->user;
+		else
+			user = prefs.hex_irc_user_name;
 
 		switch (serv->sasl_mech)
 		{
@@ -1768,6 +1818,7 @@ inbound_sasl_authenticate (server *serv, char *data)
 #endif
 		}
 
+sasl_abort:
 		if (pass == NULL)
 		{
 			/* something went wrong abort */
@@ -1788,6 +1839,9 @@ inbound_sasl_authenticate (server *serv, char *data)
 int
 inbound_sasl_error (server *serv)
 {
+	if (serv->retry_sasl && !serv->sent_saslauth)
+		return 1;
+
 	/* If server sent 904 before we sent password,
 		* mech not support so fallback to next mech */
 	if (!serv->sent_saslauth && serv->sasl_mech != MECH_EXTERNAL && serv->sasl_mech != MECH_PLAIN)

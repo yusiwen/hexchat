@@ -114,7 +114,6 @@ random_line (char *file_name)
 	}
 	while (lines > ran);
 	fclose (fh);
-	buf[strlen (buf) - 1] = 0;	  /* remove the trailing '\n' */
 	return strdup (buf);
 }
 
@@ -2477,7 +2476,7 @@ cmd_lastlog (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 static int
 cmd_list (struct session *sess, char *tbuf, char *word[], char *word_eol[])
 {
-	sess->server->p_list_channels (sess->server, word_eol[2], 1);
+	fe_open_chan_list (sess->server, word_eol[2], TRUE);
 
 	return TRUE;
 }
