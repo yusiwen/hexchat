@@ -542,7 +542,7 @@ log_create_pathname (char *servname, char *channame, char *netname)
 	/* insert time/date */
 	now = time (NULL);
 	tm = localtime (&now);
-	strftime (fnametime, sizeof (fnametime), fname, tm);
+	strftime_validated (fnametime, sizeof (fnametime), fname, tm);
 
 	/* create final path/filename */
 	if (logmask_is_fullpath ())
@@ -649,14 +649,7 @@ get_stamp_str (char *fmt, time_t tim, char **ret)
 			fmt = loc;
 	}
 
-	len = strftime (dest, sizeof (dest), fmt, localtime (&tim));
-#ifdef WIN32
-	if (!len)
-	{
-		/* use failsafe format until a correct one is specified */
-		len = strftime (dest, sizeof (dest), "[%H:%M:%S]", localtime (&tim));
-	}
-#endif
+	len = strftime_validated (dest, sizeof (dest), fmt, localtime (&tim));
 	if (len)
 	{
 		if (prefs.utf8_locale)
@@ -2081,8 +2074,6 @@ text_emit (int index, session *sess, char *a, char *b, char *c, char *d,
 	int i;
 	unsigned int stripcolor_args = (chanopt_is_set (prefs.hex_text_stripcolor_msg, sess->text_strip) ? 0xFFFFFFFF : 0);
 	char tbuf[NICKLEN + 4];
-	int eat1;
-	int eat2;
 
 	if (prefs.hex_text_color_nicks && (index == XP_TE_CHANACTION || index == XP_TE_CHANMSG))
 	{
@@ -2099,10 +2090,7 @@ text_emit (int index, session *sess, char *a, char *b, char *c, char *d,
 	for (i = 5; i < PDIWORDS; i++)
 		word[i] = "\000";
 
-	eat1 = plugin_emit_print (sess, word);
-	eat2 = plugin_emit_print_attrs (sess, word, timestamp);
-
-	if (eat1 || eat2)
+	if (plugin_emit_print (sess, word, timestamp))
 		return;
 
 	/* If a plugin's callback executes "/close", 'sess' may be invalid */

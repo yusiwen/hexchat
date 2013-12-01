@@ -467,7 +467,7 @@ inbound_chanmsg (server *serv, session *sess, char *chan, char *from,
 
 	if (fromme)
 	{
-  		if (prefs.hex_away_auto_unmark && serv->is_away)
+		if (prefs.hex_away_auto_unmark && serv->is_away && !tags_data->timestamp)
 			sess->server->p_set_back (sess->server);
 		EMIT_SIGNAL_TIMESTAMP (XP_TE_UCHANMSG, sess, from, text, nickchar, NULL,
 									  0, tags_data->timestamp);
@@ -1439,10 +1439,15 @@ inbound_banlist (session *sess, time_t stamp, char *chan, char *mask,
 	server *serv = sess->server;
 	char *nl;
 
-	if ((nl = strchr (time_str, '\n')))
-		*nl = 0;
-	if (stamp == 0)
+	if (stamp <= 0)
+	{
 		time_str = "";
+	}
+	else
+	{
+		if ((nl = strchr (time_str, '\n')))
+			*nl = 0;
+	}
 
 	sess = find_channel (serv, chan);
 	if (!sess)
